@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -96,6 +96,7 @@ class CreditCardRepository:
         due_day: Optional[int],
         counts_as_liquidity: bool,
         note: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
     ) -> int:
         sql = """
             INSERT INTO credit_cards (
@@ -105,8 +106,8 @@ class CreditCardRepository:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         bank_id,
@@ -139,6 +140,7 @@ class CreditCardRepository:
         counts_as_liquidity: bool,
         is_active: bool,
         note: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE credit_cards
@@ -148,8 +150,8 @@ class CreditCardRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         bank_id,
@@ -175,7 +177,11 @@ class CreditCardRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Kredi kartı güncellenemedi.")
 
-    def soft_delete_credit_card(self, card_id: int) -> None:
+    def soft_delete_credit_card(
+        self,
+        card_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE credit_cards
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0,
@@ -183,8 +189,8 @@ class CreditCardRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (card_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (card_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Kredi kartı bulunamadı.")
         except NotFoundError:
@@ -310,6 +316,7 @@ class CreditCardRepository:
         due_date: Optional[str],
         available_limit: Optional[int],
         note: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
     ) -> int:
         sql = """
             INSERT INTO card_statements (
@@ -319,8 +326,8 @@ class CreditCardRepository:
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         credit_card_id,
@@ -349,6 +356,7 @@ class CreditCardRepository:
         due_date: Optional[str],
         available_limit: Optional[int],
         note: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE card_statements
@@ -357,8 +365,8 @@ class CreditCardRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         statement_date,
@@ -381,15 +389,19 @@ class CreditCardRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Ekstre güncellenemedi.")
 
-    def soft_delete_statement(self, statement_id: int) -> None:
+    def soft_delete_statement(
+        self,
+        statement_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE card_statements
             SET deleted_at = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (statement_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (statement_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Ekstre bulunamadı.")
         except NotFoundError:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -55,14 +55,15 @@ class BankRepository:
         name: str,
         short_name: Optional[str] = None,
         note: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> int:
         sql = """
             INSERT INTO banks (name, short_name, note)
             VALUES (?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (name, short_name, note))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (name, short_name, note))
                 return int(cursor.lastrowid)
         except sqlite3.IntegrityError as exc:
             raise RepositoryError(f"'{name}' bankası zaten mevcut.") from exc
@@ -76,6 +77,7 @@ class BankRepository:
         short_name: Optional[str] = None,
         is_active: bool = True,
         note: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE banks
@@ -84,8 +86,8 @@ class BankRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (name, short_name, int(is_active), note, bank_id),
                 )
@@ -98,7 +100,11 @@ class BankRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Banka güncellenemedi.")
 
-    def soft_delete_bank(self, bank_id: int) -> None:
+    def soft_delete_bank(
+        self,
+        bank_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE banks
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0,
@@ -106,8 +112,8 @@ class BankRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (bank_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (bank_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Banka bulunamadı.")
         except NotFoundError:

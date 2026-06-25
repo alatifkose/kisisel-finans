@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from app.core.database import get_connection
 from app.core.exceptions import AppError, NotFoundError, RepositoryError, ValidationError
 from app.core.validators import is_non_empty_text
 from app.repositories.bank_repository import BankRepository
@@ -37,16 +38,19 @@ class BankService:
         normalized_short_name = self._normalize_optional_text(short_name)
         normalized_note = self._normalize_optional_text(note)
         try:
-            bank_id = self._bank_repo.create_bank(
-                normalized_name,
-                normalized_short_name,
-                normalized_note,
-            )
-            self._audit.log_create(
-                "bank",
-                bank_id,
-                new_value={"name": normalized_name, "short_name": normalized_short_name},
-            )
+            with get_connection() as conn:
+                bank_id = self._bank_repo.create_bank(
+                    normalized_name,
+                    normalized_short_name,
+                    normalized_note,
+                    conn,
+                )
+                self._audit.log_create(
+                    "bank",
+                    bank_id,
+                    new_value={"name": normalized_name, "short_name": normalized_short_name},
+                    conn=conn,
+                )
             return bank_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
@@ -64,24 +68,27 @@ class BankService:
         normalized_note = self._normalize_optional_text(note)
         existing = self._bank_repo.get_bank(bank_id)
         try:
-            self._bank_repo.update_bank(
-                bank_id,
-                normalized_name,
-                normalized_short_name,
-                is_active,
-                normalized_note,
-            )
-            if existing:
-                self._audit.log_update(
-                    "bank",
+            with get_connection() as conn:
+                self._bank_repo.update_bank(
                     bank_id,
-                    old_value=dict(existing),
-                    new_value={
-                        "name": normalized_name,
-                        "short_name": normalized_short_name,
-                        "is_active": is_active,
-                    },
+                    normalized_name,
+                    normalized_short_name,
+                    is_active,
+                    normalized_note,
+                    conn,
                 )
+                if existing:
+                    self._audit.log_update(
+                        "bank",
+                        bank_id,
+                        old_value=dict(existing),
+                        new_value={
+                            "name": normalized_name,
+                            "short_name": normalized_short_name,
+                            "is_active": is_active,
+                        },
+                        conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
@@ -95,9 +102,12 @@ class BankService:
             )
         try:
             existing = self._bank_repo.get_bank(bank_id)
-            self._bank_repo.soft_delete_bank(bank_id)
-            if existing:
-                self._audit.log_delete("bank", bank_id, old_value=dict(existing))
+            with get_connection() as conn:
+                self._bank_repo.soft_delete_bank(bank_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "bank", bank_id, old_value=dict(existing), conn=conn
+                    )
         except NotFoundError as exc:
             raise ValidationError("Silinecek banka bulunamadı.") from exc
         except RepositoryError as exc:

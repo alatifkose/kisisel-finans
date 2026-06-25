@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from app.core.database import get_connection
 from app.core.exceptions import AppError, NotFoundError, RepositoryError, ValidationError
 from app.core.money import format_amount_with_grouping, parse_amount
 from app.core.validators import is_non_empty_text
@@ -57,17 +58,21 @@ class CreditCardService:
     def create_credit_card(self, data: Dict[str, Any]) -> int:
         parsed = self._parse_card_data(data)
         try:
-            card_id = self._credit_card_repo.create_credit_card(
-                parsed["bank_id"],
-                parsed["name"],
-                parsed["currency_id"],
-                parsed["card_limit"],
-                parsed["statement_day"],
-                parsed["due_day"],
-                parsed["counts_as_liquidity"],
-                parsed["note"],
-            )
-            self._audit.log_create("credit_card", card_id, new_value={"name": parsed["name"]})
+            with get_connection() as conn:
+                card_id = self._credit_card_repo.create_credit_card(
+                    parsed["bank_id"],
+                    parsed["name"],
+                    parsed["currency_id"],
+                    parsed["card_limit"],
+                    parsed["statement_day"],
+                    parsed["due_day"],
+                    parsed["counts_as_liquidity"],
+                    parsed["note"],
+                    conn,
+                )
+                self._audit.log_create(
+                    "credit_card", card_id, new_value={"name": parsed["name"]}, conn=conn
+                )
             return card_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
@@ -77,25 +82,28 @@ class CreditCardService:
         is_active = bool(data.get("is_active", True))
         existing = self._credit_card_repo.get_credit_card(card_id)
         try:
-            self._credit_card_repo.update_credit_card(
-                card_id,
-                parsed["bank_id"],
-                parsed["name"],
-                parsed["currency_id"],
-                parsed["card_limit"],
-                parsed["statement_day"],
-                parsed["due_day"],
-                parsed["counts_as_liquidity"],
-                is_active,
-                parsed["note"],
-            )
-            if existing:
-                self._audit.log_update(
-                    "credit_card",
+            with get_connection() as conn:
+                self._credit_card_repo.update_credit_card(
                     card_id,
-                    old_value={"name": existing.get("name")},
-                    new_value={"name": parsed["name"]},
+                    parsed["bank_id"],
+                    parsed["name"],
+                    parsed["currency_id"],
+                    parsed["card_limit"],
+                    parsed["statement_day"],
+                    parsed["due_day"],
+                    parsed["counts_as_liquidity"],
+                    is_active,
+                    parsed["note"],
+                    conn,
                 )
+                if existing:
+                    self._audit.log_update(
+                        "credit_card",
+                        card_id,
+                        old_value={"name": existing.get("name")},
+                        new_value={"name": parsed["name"]},
+                        conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
@@ -109,9 +117,13 @@ class CreditCardService:
             )
         try:
             existing = self._credit_card_repo.get_credit_card(card_id)
-            self._credit_card_repo.soft_delete_credit_card(card_id)
-            if existing:
-                self._audit.log_delete("credit_card", card_id, old_value={"name": existing.get("name")})
+            with get_connection() as conn:
+                self._credit_card_repo.soft_delete_credit_card(card_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "credit_card", card_id,
+                        old_value={"name": existing.get("name")}, conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
@@ -139,20 +151,23 @@ class CreditCardService:
         if card is None or not card.get("is_active"):
             raise ValidationError("Seçilen kredi kartı bulunamadı veya aktif değil.")
         try:
-            statement_id = self._credit_card_repo.create_statement(
-                parsed["credit_card_id"],
-                parsed["statement_date"],
-                parsed["statement_debt"],
-                parsed["min_payment"],
-                parsed["due_date"],
-                parsed["available_limit"],
-                parsed["note"],
-            )
-            self._audit.log_create(
-                "card_statement",
-                statement_id,
-                new_value={"credit_card_id": parsed["credit_card_id"], "statement_date": parsed["statement_date"]},
-            )
+            with get_connection() as conn:
+                statement_id = self._credit_card_repo.create_statement(
+                    parsed["credit_card_id"],
+                    parsed["statement_date"],
+                    parsed["statement_debt"],
+                    parsed["min_payment"],
+                    parsed["due_date"],
+                    parsed["available_limit"],
+                    parsed["note"],
+                    conn,
+                )
+                self._audit.log_create(
+                    "card_statement",
+                    statement_id,
+                    new_value={"credit_card_id": parsed["credit_card_id"], "statement_date": parsed["statement_date"]},
+                    conn=conn,
+                )
             return statement_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
@@ -164,21 +179,24 @@ class CreditCardService:
         data = {**data, "credit_card_id": existing["credit_card_id"]}
         parsed = self._parse_statement_data(data)
         try:
-            self._credit_card_repo.update_statement(
-                statement_id,
-                parsed["statement_date"],
-                parsed["statement_debt"],
-                parsed["min_payment"],
-                parsed["due_date"],
-                parsed["available_limit"],
-                parsed["note"],
-            )
-            self._audit.log_update(
-                "card_statement",
-                statement_id,
-                old_value={"statement_debt": existing.get("statement_debt")},
-                new_value={"statement_debt": parsed["statement_debt"]},
-            )
+            with get_connection() as conn:
+                self._credit_card_repo.update_statement(
+                    statement_id,
+                    parsed["statement_date"],
+                    parsed["statement_debt"],
+                    parsed["min_payment"],
+                    parsed["due_date"],
+                    parsed["available_limit"],
+                    parsed["note"],
+                    conn,
+                )
+                self._audit.log_update(
+                    "card_statement",
+                    statement_id,
+                    old_value={"statement_debt": existing.get("statement_debt")},
+                    new_value={"statement_debt": parsed["statement_debt"]},
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
@@ -187,13 +205,15 @@ class CreditCardService:
     def delete_statement(self, statement_id: int) -> None:
         existing = self._credit_card_repo.get_statement(statement_id)
         try:
-            self._credit_card_repo.soft_delete_statement(statement_id)
-            if existing:
-                self._audit.log_delete(
-                    "card_statement",
-                    statement_id,
-                    old_value={"statement_date": existing.get("statement_date")},
-                )
+            with get_connection() as conn:
+                self._credit_card_repo.soft_delete_statement(statement_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "card_statement",
+                        statement_id,
+                        old_value={"statement_date": existing.get("statement_date")},
+                        conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:

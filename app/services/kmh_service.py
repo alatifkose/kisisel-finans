@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.core.database import get_connection
 from app.core.exceptions import AppError, NotFoundError, RepositoryError, ValidationError
 from app.core.money import format_amount_with_grouping, parse_amount
 from app.core.validators import is_non_empty_text
@@ -53,21 +54,24 @@ class KmhService:
     def create_kmh_account(self, data: Dict[str, Any]) -> Tuple[int, List[str]]:
         parsed, warnings = self._parse_kmh_data(data)
         try:
-            kmh_id = self._kmh_repo.create_kmh_account(
-                parsed["bank_id"],
-                parsed["account_id"],
-                parsed["name"],
-                parsed["kmh_limit"],
-                parsed["used_amount"],
-                parsed["interest_rate"],
-                parsed["counts_as_liquidity"],
-                parsed["note"],
-            )
-            self._audit.log_create(
-                "kmh_account",
-                kmh_id,
-                new_value={"name": parsed["name"], "kmh_limit": parsed["kmh_limit"]},
-            )
+            with get_connection() as conn:
+                kmh_id = self._kmh_repo.create_kmh_account(
+                    parsed["bank_id"],
+                    parsed["account_id"],
+                    parsed["name"],
+                    parsed["kmh_limit"],
+                    parsed["used_amount"],
+                    parsed["interest_rate"],
+                    parsed["counts_as_liquidity"],
+                    parsed["note"],
+                    conn,
+                )
+                self._audit.log_create(
+                    "kmh_account",
+                    kmh_id,
+                    new_value={"name": parsed["name"], "kmh_limit": parsed["kmh_limit"]},
+                    conn=conn,
+                )
             return kmh_id, warnings
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
@@ -77,24 +81,27 @@ class KmhService:
         is_active = bool(data.get("is_active", True))
         existing = self._kmh_repo.get_kmh_account_with_details(kmh_id)
         try:
-            self._kmh_repo.update_kmh_account(
-                kmh_id,
-                parsed["bank_id"],
-                parsed["account_id"],
-                parsed["name"],
-                parsed["kmh_limit"],
-                parsed["used_amount"],
-                parsed["interest_rate"],
-                parsed["counts_as_liquidity"],
-                is_active,
-                parsed["note"],
-            )
-            self._audit.log_update(
-                "kmh_account",
-                kmh_id,
-                old_value={"used_amount": existing.get("used_amount") if existing else None},
-                new_value={"used_amount": parsed["used_amount"], "kmh_limit": parsed["kmh_limit"]},
-            )
+            with get_connection() as conn:
+                self._kmh_repo.update_kmh_account(
+                    kmh_id,
+                    parsed["bank_id"],
+                    parsed["account_id"],
+                    parsed["name"],
+                    parsed["kmh_limit"],
+                    parsed["used_amount"],
+                    parsed["interest_rate"],
+                    parsed["counts_as_liquidity"],
+                    is_active,
+                    parsed["note"],
+                    conn,
+                )
+                self._audit.log_update(
+                    "kmh_account",
+                    kmh_id,
+                    old_value={"used_amount": existing.get("used_amount") if existing else None},
+                    new_value={"used_amount": parsed["used_amount"], "kmh_limit": parsed["kmh_limit"]},
+                    conn=conn,
+                )
             return warnings
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
@@ -108,9 +115,13 @@ class KmhService:
             )
         try:
             existing = self._kmh_repo.get_kmh_account_with_details(kmh_id)
-            self._kmh_repo.soft_delete_kmh_account(kmh_id)
-            if existing:
-                self._audit.log_delete("kmh_account", kmh_id, old_value={"name": existing.get("name")})
+            with get_connection() as conn:
+                self._kmh_repo.soft_delete_kmh_account(kmh_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "kmh_account", kmh_id,
+                        old_value={"name": existing.get("name")}, conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
@@ -136,13 +147,15 @@ class KmhService:
                 "Kullanılan tutar limitten büyük. Limit aşımı durumu oluşmuş olabilir."
             )
         try:
-            self._kmh_repo.update_kmh_used_amount(kmh_id, used_amount)
-            self._audit.log_update(
-                "kmh_account",
-                kmh_id,
-                old_value={"used_amount": int(kmh["used_amount"])},
-                new_value={"used_amount": used_amount},
-            )
+            with get_connection() as conn:
+                self._kmh_repo.update_kmh_used_amount(kmh_id, used_amount, conn)
+                self._audit.log_update(
+                    "kmh_account",
+                    kmh_id,
+                    old_value={"used_amount": int(kmh["used_amount"])},
+                    new_value={"used_amount": used_amount},
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:

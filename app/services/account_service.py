@@ -75,25 +75,28 @@ class AccountService:
         )
         normalized_note = self._normalize_optional_text(note)
         try:
-            account_id = self._account_repo.create_account(
-                bank_id,
-                normalized_name,
-                currency_id,
-                opening_balance,
-                normalized_tracking_mode,
-                normalized_note,
-            )
-            self._audit.log_create(
-                "account",
-                account_id,
-                new_value={
-                    "bank_id": bank_id,
-                    "name": normalized_name,
-                    "currency_id": currency_id,
-                    "opening_balance": opening_balance,
-                    "tracking_mode": normalized_tracking_mode,
-                },
-            )
+            with get_connection() as conn:
+                account_id = self._account_repo.create_account(
+                    bank_id,
+                    normalized_name,
+                    currency_id,
+                    opening_balance,
+                    normalized_tracking_mode,
+                    normalized_note,
+                    conn,
+                )
+                self._audit.log_create(
+                    "account",
+                    account_id,
+                    new_value={
+                        "bank_id": bank_id,
+                        "name": normalized_name,
+                        "currency_id": currency_id,
+                        "opening_balance": opening_balance,
+                        "tracking_mode": normalized_tracking_mode,
+                    },
+                    conn=conn,
+                )
             return account_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
@@ -127,31 +130,34 @@ class AccountService:
 
         normalized_note = self._normalize_optional_text(note)
         try:
-            self._account_repo.update_account(
-                account_id,
-                bank_id,
-                normalized_name,
-                currency_id,
-                opening_balance,
-                current_balance,
-                normalized_tracking_mode,
-                is_active,
-                normalized_note,
-            )
-            self._audit.log_update(
-                "account",
-                account_id,
-                old_value=dict(existing),
-                new_value={
-                    "bank_id": bank_id,
-                    "name": normalized_name,
-                    "currency_id": currency_id,
-                    "opening_balance": opening_balance,
-                    "current_balance": current_balance,
-                    "tracking_mode": normalized_tracking_mode,
-                    "is_active": is_active,
-                },
-            )
+            with get_connection() as conn:
+                self._account_repo.update_account(
+                    account_id,
+                    bank_id,
+                    normalized_name,
+                    currency_id,
+                    opening_balance,
+                    current_balance,
+                    normalized_tracking_mode,
+                    is_active,
+                    normalized_note,
+                    conn,
+                )
+                self._audit.log_update(
+                    "account",
+                    account_id,
+                    old_value=dict(existing),
+                    new_value={
+                        "bank_id": bank_id,
+                        "name": normalized_name,
+                        "currency_id": currency_id,
+                        "opening_balance": opening_balance,
+                        "current_balance": current_balance,
+                        "tracking_mode": normalized_tracking_mode,
+                        "is_active": is_active,
+                    },
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
@@ -164,8 +170,11 @@ class AccountService:
         if int(account["current_balance"]) != 0:
             raise ValidationError(_ZERO_BALANCE_MESSAGE)
         try:
-            self._account_repo.soft_delete_account(account_id)
-            self._audit.log_delete("account", account_id, old_value=dict(account))
+            with get_connection() as conn:
+                self._account_repo.soft_delete_account(account_id, conn)
+                self._audit.log_delete(
+                    "account", account_id, old_value=dict(account), conn=conn
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:

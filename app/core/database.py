@@ -49,6 +49,22 @@ def transaction(conn: sqlite3.Connection) -> Generator[sqlite3.Connection, None,
         raise
 
 
+@contextmanager
+def connection_scope(
+    conn: Optional[sqlite3.Connection] = None,
+) -> Generator[sqlite3.Connection, None, None]:
+    """Dışarıdan bir bağlantı verilmişse onu kullan (commit/rollback sahibinindir);
+    verilmemişse yeni bir bağlantı açıp commit/rollback'ı kendin yönet.
+
+    Repository metodlarının hem tek başına hem de bir servis transaction'ı
+    içinde (audit ile aynı atomik blokta) çağrılabilmesini sağlar."""
+    if conn is not None:
+        yield conn
+    else:
+        with get_connection() as owned:
+            yield owned
+
+
 def _read_sql_file(path: Path) -> str:
     if not path.exists():
         raise DatabaseError(f"SQL dosyası bulunamadı: {path}")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -116,6 +116,7 @@ class KmhRepository:
         interest_rate: Optional[float],
         counts_as_liquidity: bool,
         note: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
     ) -> int:
         sql = """
             INSERT INTO kmh_accounts (
@@ -125,8 +126,8 @@ class KmhRepository:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         bank_id,
@@ -159,6 +160,7 @@ class KmhRepository:
         counts_as_liquidity: bool,
         is_active: bool,
         note: Optional[str],
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE kmh_accounts
@@ -168,8 +170,8 @@ class KmhRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         bank_id,
@@ -195,15 +197,20 @@ class KmhRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "KMH hesabı güncellenemedi.")
 
-    def update_kmh_used_amount(self, kmh_id: int, used_amount: int) -> None:
+    def update_kmh_used_amount(
+        self,
+        kmh_id: int,
+        used_amount: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE kmh_accounts
             SET used_amount = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (used_amount, kmh_id))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (used_amount, kmh_id))
                 if cursor.rowcount == 0:
                     raise NotFoundError("KMH hesabı bulunamadı.")
         except NotFoundError:
@@ -211,7 +218,11 @@ class KmhRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "KMH kullanım tutarı güncellenemedi.")
 
-    def soft_delete_kmh_account(self, kmh_id: int) -> None:
+    def soft_delete_kmh_account(
+        self,
+        kmh_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE kmh_accounts
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0,
@@ -219,8 +230,8 @@ class KmhRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (kmh_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (kmh_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("KMH hesabı bulunamadı.")
         except NotFoundError:

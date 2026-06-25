@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -92,6 +92,7 @@ class AccountRepository:
         opening_balance: int,
         tracking_mode: str = "ledger",
         note: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> int:
         sql = """
             INSERT INTO accounts (
@@ -101,8 +102,8 @@ class AccountRepository:
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         bank_id,
@@ -133,6 +134,7 @@ class AccountRepository:
         tracking_mode: str,
         is_active: bool,
         note: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE accounts
@@ -143,8 +145,8 @@ class AccountRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (
                         bank_id,
@@ -169,7 +171,11 @@ class AccountRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Hesap güncellenemedi.")
 
-    def soft_delete_account(self, account_id: int) -> None:
+    def soft_delete_account(
+        self,
+        account_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE accounts
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0,
@@ -177,8 +183,8 @@ class AccountRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (account_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (account_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Hesap bulunamadı.")
         except NotFoundError:
