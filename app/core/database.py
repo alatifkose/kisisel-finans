@@ -74,7 +74,7 @@ def _record_schema_version(conn: sqlite3.Connection, version: int) -> None:
     )
 
 
-def _discover_migrations() -> Iterable[tuple[int, Path]]:
+def _discover_migrations() -> list[tuple[int, Path]]:
     if not MIGRATIONS_DIR.exists():
         return []
 
@@ -87,6 +87,21 @@ def _discover_migrations() -> Iterable[tuple[int, Path]]:
 
     migrations.sort(key=lambda item: item[0])
     return migrations
+
+
+def _latest_schema_version() -> int:
+    """schema.sql'in karşılık geldiği sürüm = en yüksek migration numarası."""
+    migrations = _discover_migrations()
+    if not migrations:
+        return BASE_SCHEMA_VERSION
+    return max(version for version, _ in migrations)
+
+
+def _schema_version_table_exists(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
+    ).fetchone()
+    return row is not None
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
@@ -105,8 +120,16 @@ def init_database() -> None:
     MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     with get_connection() as conn:
+        # schema.sql daima nihai şemayı kurar. Boş bir veritabanında bu, tüm
+        # migration'ların uygulanmış haline denktir; bu yüzden en yüksek
+        # migration sürümünü "uygulanmış" damgalayıp redundant (ve 007 gibi
+        # çakışan) migration'ların yeniden koşmasını engelliyoruz. Var olan
+        # veritabanlarında ise migration runner normal şekilde eksikleri tamamlar.
+        is_fresh = not _schema_version_table_exists(conn)
         _apply_schema_sql(conn)
-        if _get_current_schema_version(conn) == 0:
+        if is_fresh:
+            _record_schema_version(conn, _latest_schema_version())
+        elif _get_current_schema_version(conn) == 0:
             _record_schema_version(conn, BASE_SCHEMA_VERSION)
         _run_migrations(conn)
 
