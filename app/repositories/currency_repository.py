@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -50,14 +50,20 @@ class CurrencyRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Para birimi okunamadı.")
 
-    def create_currency(self, code: str, symbol: str, scale: int) -> int:
+    def create_currency(
+        self,
+        code: str,
+        symbol: str,
+        scale: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> int:
         sql = """
             INSERT INTO currencies (code, symbol, scale)
             VALUES (?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (code, symbol, scale))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (code, symbol, scale))
                 return int(cursor.lastrowid)
         except sqlite3.IntegrityError as exc:
             raise RepositoryError(f"'{code}' para birimi kodu zaten kullanılıyor.") from exc
@@ -71,6 +77,7 @@ class CurrencyRepository:
         symbol: str,
         scale: int,
         is_active: bool,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE currencies
@@ -78,8 +85,8 @@ class CurrencyRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (code, symbol, scale, int(is_active), currency_id))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (code, symbol, scale, int(is_active), currency_id))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Para birimi bulunamadı.")
         except sqlite3.IntegrityError as exc:
@@ -89,15 +96,19 @@ class CurrencyRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Para birimi güncellenemedi.")
 
-    def soft_delete_currency(self, currency_id: int) -> None:
+    def soft_delete_currency(
+        self,
+        currency_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE currencies
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (currency_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (currency_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Para birimi bulunamadı.")
         except NotFoundError:

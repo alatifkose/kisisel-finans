@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -66,14 +66,20 @@ class CategoryRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Kategori okunamadı.")
 
-    def create_category(self, name: str, nature: str, parent_id: Optional[int] = None) -> int:
+    def create_category(
+        self,
+        name: str,
+        nature: str,
+        parent_id: Optional[int] = None,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> int:
         sql = """
             INSERT INTO categories (name, nature, parent_id)
             VALUES (?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (name, nature, parent_id))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (name, nature, parent_id))
                 return int(cursor.lastrowid)
         except sqlite3.IntegrityError as exc:
             raise RepositoryError(
@@ -89,6 +95,7 @@ class CategoryRepository:
         nature: str,
         parent_id: Optional[int],
         is_active: bool,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE categories
@@ -96,8 +103,8 @@ class CategoryRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (name, nature, parent_id, int(is_active), category_id),
                 )
@@ -112,15 +119,19 @@ class CategoryRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Kategori güncellenemedi.")
 
-    def soft_delete_category(self, category_id: int) -> None:
+    def soft_delete_category(
+        self,
+        category_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE categories
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (category_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (category_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Kategori bulunamadı.")
         except NotFoundError:

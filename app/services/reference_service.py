@@ -5,12 +5,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from app.core.constants import VALID_CATEGORY_NATURES, VALID_COMPONENT_NATURES, Nature
+from app.core.database import get_connection
 from app.core.exceptions import AppError, NotFoundError, RepositoryError, ValidationError
 from app.core.validators import is_non_empty_text
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.component_type_repository import ComponentTypeRepository
 from app.repositories.currency_repository import CurrencyRepository
+from app.services.audit_service import AuditService
 
 
 class ReferenceService:
@@ -25,11 +27,13 @@ class ReferenceService:
         category_repo: Optional[CategoryRepository] = None,
         asset_repo: Optional[AssetRepository] = None,
         component_type_repo: Optional[ComponentTypeRepository] = None,
+        audit_service: Optional[AuditService] = None,
     ) -> None:
         self._currency_repo = currency_repo or CurrencyRepository()
         self._category_repo = category_repo or CategoryRepository()
         self._asset_repo = asset_repo or AssetRepository()
         self._component_type_repo = component_type_repo or ComponentTypeRepository()
+        self._audit = audit_service or AuditService()
 
     # --- Para birimi ---
 
@@ -41,11 +45,20 @@ class ReferenceService:
         normalized_symbol = (symbol or "").strip()
         validated_scale = self._validate_scale(scale)
         try:
-            return self._currency_repo.create_currency(
-                normalized_code,
-                normalized_symbol,
-                validated_scale,
-            )
+            with get_connection() as conn:
+                currency_id = self._currency_repo.create_currency(
+                    normalized_code,
+                    normalized_symbol,
+                    validated_scale,
+                    conn,
+                )
+                self._audit.log_create(
+                    "currency",
+                    currency_id,
+                    new_value={"code": normalized_code, "scale": validated_scale},
+                    conn=conn,
+                )
+            return currency_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
@@ -60,22 +73,39 @@ class ReferenceService:
         normalized_code = self._validate_currency_code(code)
         normalized_symbol = (symbol or "").strip()
         validated_scale = self._validate_scale(scale)
+        existing = self._currency_repo.get_currency(currency_id)
         try:
-            self._currency_repo.update_currency(
-                currency_id,
-                normalized_code,
-                normalized_symbol,
-                validated_scale,
-                is_active,
-            )
+            with get_connection() as conn:
+                self._currency_repo.update_currency(
+                    currency_id,
+                    normalized_code,
+                    normalized_symbol,
+                    validated_scale,
+                    is_active,
+                    conn,
+                )
+                self._audit.log_update(
+                    "currency",
+                    currency_id,
+                    old_value={"code": existing.get("code")} if existing else None,
+                    new_value={"code": normalized_code, "scale": validated_scale, "is_active": is_active},
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
     def delete_currency(self, currency_id: int) -> None:
+        existing = self._currency_repo.get_currency(currency_id)
         try:
-            self._currency_repo.soft_delete_currency(currency_id)
+            with get_connection() as conn:
+                self._currency_repo.soft_delete_currency(currency_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "currency", currency_id,
+                        old_value={"code": existing.get("code")}, conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError("Silinecek para birimi bulunamadı.") from exc
         except RepositoryError as exc:
@@ -96,11 +126,20 @@ class ReferenceService:
         normalized_nature = self._validate_category_nature(nature)
         self._validate_parent_category(parent_id)
         try:
-            return self._category_repo.create_category(
-                normalized_name,
-                normalized_nature,
-                parent_id,
-            )
+            with get_connection() as conn:
+                category_id = self._category_repo.create_category(
+                    normalized_name,
+                    normalized_nature,
+                    parent_id,
+                    conn,
+                )
+                self._audit.log_create(
+                    "category",
+                    category_id,
+                    new_value={"name": normalized_name, "nature": normalized_nature},
+                    conn=conn,
+                )
+            return category_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
@@ -115,22 +154,40 @@ class ReferenceService:
         normalized_name = self._validate_category_name(name)
         normalized_nature = self._validate_category_nature(nature)
         self._validate_parent_category(parent_id, category_id=category_id)
+        existing = self._category_repo.get_category(category_id)
         try:
-            self._category_repo.update_category(
-                category_id,
-                normalized_name,
-                normalized_nature,
-                parent_id,
-                is_active,
-            )
+            with get_connection() as conn:
+                self._category_repo.update_category(
+                    category_id,
+                    normalized_name,
+                    normalized_nature,
+                    parent_id,
+                    is_active,
+                    conn,
+                )
+                self._audit.log_update(
+                    "category",
+                    category_id,
+                    old_value={"name": existing.get("name"), "nature": existing.get("nature")} if existing else None,
+                    new_value={"name": normalized_name, "nature": normalized_nature, "is_active": is_active},
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
     def delete_category(self, category_id: int) -> None:
+        existing = self._category_repo.get_category(category_id)
         try:
-            self._category_repo.soft_delete_category(category_id)
+            with get_connection() as conn:
+                self._category_repo.soft_delete_category(category_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "category", category_id,
+                        old_value={"name": existing.get("name"), "nature": existing.get("nature")},
+                        conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError("Silinecek kategori bulunamadı.") from exc
         except RepositoryError as exc:
@@ -145,23 +202,49 @@ class ReferenceService:
         normalized_name = self._validate_asset_name(name)
         normalized_type = (type_ or "other").strip() or "other"
         try:
-            return self._asset_repo.create_asset(normalized_name, normalized_type)
+            with get_connection() as conn:
+                asset_id = self._asset_repo.create_asset(normalized_name, normalized_type, conn)
+                self._audit.log_create(
+                    "asset",
+                    asset_id,
+                    new_value={"name": normalized_name, "type": normalized_type},
+                    conn=conn,
+                )
+            return asset_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
     def update_asset(self, asset_id: int, name: str, type_: str, is_active: bool) -> None:
         normalized_name = self._validate_asset_name(name)
         normalized_type = (type_ or "other").strip() or "other"
+        existing = self._asset_repo.get_asset(asset_id)
         try:
-            self._asset_repo.update_asset(asset_id, normalized_name, normalized_type, is_active)
+            with get_connection() as conn:
+                self._asset_repo.update_asset(
+                    asset_id, normalized_name, normalized_type, is_active, conn
+                )
+                self._audit.log_update(
+                    "asset",
+                    asset_id,
+                    old_value={"name": existing.get("name")} if existing else None,
+                    new_value={"name": normalized_name, "type": normalized_type, "is_active": is_active},
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
     def delete_asset(self, asset_id: int) -> None:
+        existing = self._asset_repo.get_asset(asset_id)
         try:
-            self._asset_repo.soft_delete_asset(asset_id)
+            with get_connection() as conn:
+                self._asset_repo.soft_delete_asset(asset_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "asset", asset_id,
+                        old_value={"name": existing.get("name")}, conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError("Silinecek varlık bulunamadı.") from exc
         except RepositoryError as exc:
@@ -187,12 +270,21 @@ class ReferenceService:
             default_category_id,
         )
         try:
-            return self._component_type_repo.create_component_type(
-                normalized_code,
-                normalized_name,
-                normalized_nature,
-                validated_category_id,
-            )
+            with get_connection() as conn:
+                component_type_id = self._component_type_repo.create_component_type(
+                    normalized_code,
+                    normalized_name,
+                    normalized_nature,
+                    validated_category_id,
+                    conn,
+                )
+                self._audit.log_create(
+                    "component_type",
+                    component_type_id,
+                    new_value={"code": normalized_code, "name": normalized_name, "nature": normalized_nature},
+                    conn=conn,
+                )
+            return component_type_id
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
@@ -212,23 +304,41 @@ class ReferenceService:
             normalized_nature,
             default_category_id,
         )
+        existing = self._component_type_repo.get_component_type(component_type_id)
         try:
-            self._component_type_repo.update_component_type(
-                component_type_id,
-                normalized_code,
-                normalized_name,
-                normalized_nature,
-                is_active,
-                validated_category_id,
-            )
+            with get_connection() as conn:
+                self._component_type_repo.update_component_type(
+                    component_type_id,
+                    normalized_code,
+                    normalized_name,
+                    normalized_nature,
+                    is_active,
+                    validated_category_id,
+                    conn,
+                )
+                self._audit.log_update(
+                    "component_type",
+                    component_type_id,
+                    old_value={"code": existing.get("code"), "name": existing.get("name")} if existing else None,
+                    new_value={"code": normalized_code, "name": normalized_name, "nature": normalized_nature, "is_active": is_active},
+                    conn=conn,
+                )
         except NotFoundError as exc:
             raise ValidationError(str(exc)) from exc
         except RepositoryError as exc:
             raise ValidationError(str(exc)) from exc
 
     def delete_component_type(self, component_type_id: int) -> None:
+        existing = self._component_type_repo.get_component_type(component_type_id)
         try:
-            self._component_type_repo.soft_delete_component_type(component_type_id)
+            with get_connection() as conn:
+                self._component_type_repo.soft_delete_component_type(component_type_id, conn)
+                if existing:
+                    self._audit.log_delete(
+                        "component_type", component_type_id,
+                        old_value={"code": existing.get("code"), "name": existing.get("name")},
+                        conn=conn,
+                    )
         except NotFoundError as exc:
             raise ValidationError("Silinecek bileşen tipi bulunamadı.") from exc
         except RepositoryError as exc:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -65,14 +65,15 @@ class ComponentTypeRepository:
         name: str,
         nature: str,
         default_category_id: Optional[int] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> int:
         sql = """
             INSERT INTO component_types (code, name, nature, default_category_id)
             VALUES (?, ?, ?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (code, name, nature, default_category_id),
                 )
@@ -90,6 +91,7 @@ class ComponentTypeRepository:
         nature: str,
         is_active: bool,
         default_category_id: Optional[int] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
         sql = """
             UPDATE component_types
@@ -97,8 +99,8 @@ class ComponentTypeRepository:
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(
+            with connection_scope(conn) as c:
+                cursor = c.execute(
                     sql,
                     (code, name, nature, int(is_active), default_category_id, component_type_id),
                 )
@@ -111,15 +113,19 @@ class ComponentTypeRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Bileşen tipi güncellenemedi.")
 
-    def soft_delete_component_type(self, component_type_id: int) -> None:
+    def soft_delete_component_type(
+        self,
+        component_type_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE component_types
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (component_type_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (component_type_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Bileşen tipi bulunamadı.")
         except NotFoundError:

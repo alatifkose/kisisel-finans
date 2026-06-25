@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_connection
+from app.core.database import connection_scope, get_connection
 from app.core.exceptions import NotFoundError, RepositoryError
 
 
@@ -50,29 +50,41 @@ class AssetRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Varlık okunamadı.")
 
-    def create_asset(self, name: str, type_: str) -> int:
+    def create_asset(
+        self,
+        name: str,
+        type_: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> int:
         sql = """
             INSERT INTO assets (name, type)
             VALUES (?, ?)
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (name, type_))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (name, type_))
                 return int(cursor.lastrowid)
         except sqlite3.IntegrityError as exc:
             raise RepositoryError(f"'{name}' varlığı zaten mevcut.") from exc
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Varlık oluşturulamadı.")
 
-    def update_asset(self, asset_id: int, name: str, type_: str, is_active: bool) -> None:
+    def update_asset(
+        self,
+        asset_id: int,
+        name: str,
+        type_: str,
+        is_active: bool,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE assets
             SET name = ?, type = ?, is_active = ?
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (name, type_, int(is_active), asset_id))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (name, type_, int(is_active), asset_id))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Varlık bulunamadı.")
         except sqlite3.IntegrityError as exc:
@@ -82,15 +94,19 @@ class AssetRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Varlık güncellenemedi.")
 
-    def soft_delete_asset(self, asset_id: int) -> None:
+    def soft_delete_asset(
+        self,
+        asset_id: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         sql = """
             UPDATE assets
             SET deleted_at = CURRENT_TIMESTAMP, is_active = 0
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
-            with get_connection() as conn:
-                cursor = conn.execute(sql, (asset_id,))
+            with connection_scope(conn) as c:
+                cursor = c.execute(sql, (asset_id,))
                 if cursor.rowcount == 0:
                     raise NotFoundError("Varlık bulunamadı.")
         except NotFoundError:
