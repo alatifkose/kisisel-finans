@@ -1,2 +1,4 @@
-PyQt5
-PyQt-Fluent-Widgets
+# Doğrudan bağımlılıklar (sürümler kurulu çalışan ortama sabitlendi).
+# qfluentwidgets; PyQt5-Frameless-Window, PyQt5-sip, darkdetect'i transitif çeker.
+PyQt5==5.15.11
+PyQt-Fluent-Widgets==1.11.2
