@@ -1,0 +1,1 @@
+"""Bankalar modülü widget'ları."""

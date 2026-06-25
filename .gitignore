@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Veritabanı (kişisel veri — repoya alınmaz)
+app/data/*.db
+app/data/*.db-journal
+app/data/*.db-wal
+app/data/*.db-shm
+
+# IDE / OS
+.vscode/
+.idea/
+.cursor/
+Thumbs.db
+desktop.ini
