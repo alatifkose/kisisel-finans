@@ -16,7 +16,7 @@ from app.core.constants import (
 from app.core.database import get_connection
 from app.core.event_bus import event_bus
 from app.core.exceptions import AppError, NotFoundError, RepositoryError, ValidationError
-from app.core.money import parse_amount
+from app.core.money import format_amount_with_grouping, parse_amount
 from app.core.validators import is_non_empty_text
 from app.repositories.account_repository import AccountRepository
 from app.repositories.asset_repository import AssetRepository
@@ -52,6 +52,100 @@ class TransactionService:
 
     def get_transaction(self, transaction_id: int) -> Optional[Dict[str, Any]]:
         return self._transaction_repo.get_transaction_with_lines(transaction_id)
+
+    def negative_balance_warning(
+        self,
+        account_id: int,
+        direction: str,
+        total_amount_text: str,
+        affects_balance: bool = True,
+        exclude_transaction_id: Optional[int] = None,
+    ) -> Optional[str]:
+        """Bu hareket ledger hesabın bakiyesini sıfırın altına düşürecekse
+        kullanıcıya gösterilecek uyarı metnini döndürür; düşürmüyorsa None.
+
+        Plan §11: bakiyeyi eksiye düşüren hareket ilk sürümde *engellenmez*,
+        yalnızca uyarılır. Karar (devam/iptal) UI'da kullanıcıya bırakılır.
+        """
+        if account_id is None:
+            return None
+        account = self._account_repo.get_account_with_currency(account_id)
+        if account is None:
+            return None
+        if account["tracking_mode"] != TrackingMode.LEDGER:
+            return None
+
+        normalized_direction = (direction or "").strip().lower()
+        if normalized_direction not in self.VALID_DIRECTIONS:
+            return None
+
+        scale = int(account["currency_scale"])
+        try:
+            amount = parse_amount(total_amount_text.strip(), scale)
+        except (ValueError, AttributeError):
+            return None
+
+        return self._build_negative_warning(
+            account, amount, normalized_direction, affects_balance, exclude_transaction_id
+        )
+
+    def negative_balance_warning_for_amount(
+        self,
+        account_id: int,
+        direction: str,
+        amount: int,
+        affects_balance: bool = True,
+        exclude_transaction_id: Optional[int] = None,
+    ) -> Optional[str]:
+        """negative_balance_warning ile aynı; tutarı metin yerine en-küçük-birim
+        tamsayı olarak alır (taksit ödemesi/transfer gibi tutarı zaten parse
+        edilmiş akışlar için)."""
+        if account_id is None:
+            return None
+        account = self._account_repo.get_account_with_currency(account_id)
+        if account is None or account["tracking_mode"] != TrackingMode.LEDGER:
+            return None
+        normalized_direction = (direction or "").strip().lower()
+        if normalized_direction not in self.VALID_DIRECTIONS:
+            return None
+        return self._build_negative_warning(
+            account, int(amount), normalized_direction, affects_balance, exclude_transaction_id
+        )
+
+    def _build_negative_warning(
+        self,
+        account: Dict[str, Any],
+        amount: int,
+        direction: str,
+        affects_balance: bool,
+        exclude_transaction_id: Optional[int],
+    ) -> Optional[str]:
+        scale = int(account["currency_scale"])
+        projected = int(account["current_balance"])
+        # Düzenlemede aynı hesaptaki eski etkiyi geri al.
+        if exclude_transaction_id is not None:
+            old = self._transaction_repo.get_transaction_with_lines(exclude_transaction_id)
+            if (
+                old is not None
+                and int(old["account_id"]) == int(account["id"])
+                and bool(old["affects_balance"])
+            ):
+                projected -= self._balance_delta(
+                    str(old["direction"]), int(old["total_amount"])
+                )
+        if affects_balance:
+            projected += self._balance_delta(direction, amount)
+
+        if projected >= 0:
+            return None
+
+        projected_display = format_amount_with_grouping(projected, scale)
+        symbol = account.get("currency_symbol") or account.get("currency_code") or ""
+        return (
+            f"Bu işlem '{account['bank_name']} - {account['name']}' hesabının "
+            f"bakiyesini {projected_display} {symbol} değerine (eksiye) düşürecek. "
+            "Yine de devam etmek istiyor musunuz?"
+        )
 
     def create_transaction(
         self,

@@ -145,6 +145,15 @@ class TransactionsPage(QWidget):
             return self._rows[row_index]
         return None
 
+    def _confirm_negative_balance(self, warning: Optional[str]) -> bool:
+        """Negatif bakiye uyarısı varsa kullanıcıya sor. Uyarı yoksa True."""
+        if not warning:
+            return True
+        dialog = MessageBox("Bakiye Uyarısı", warning, self.window())
+        dialog.yesButton.setText("Devam Et")
+        dialog.cancelButton.setText("İptal")
+        return bool(dialog.exec_())
+
     def _handle_action(self, action: Callable[[], None], success_message: str) -> None:
         try:
             action()
@@ -167,6 +176,15 @@ class TransactionsPage(QWidget):
         if not dialog.exec_():
             return
         values = dialog.get_values()
+
+        warning = self._transaction_service.negative_balance_warning(
+            values["account_id"],
+            values["direction"],
+            values["total_amount_text"],
+            values["affects_balance"],
+        )
+        if not self._confirm_negative_balance(warning):
+            return
 
         def action() -> None:
             self._transaction_service.create_transaction(
@@ -209,6 +227,16 @@ class TransactionsPage(QWidget):
         if not dialog.exec_():
             return
         values = dialog.get_values()
+
+        warning = self._transaction_service.negative_balance_warning(
+            values["account_id"],
+            values["direction"],
+            values["total_amount_text"],
+            values["affects_balance"],
+            exclude_transaction_id=int(row["id"]),
+        )
+        if not self._confirm_negative_balance(warning):
+            return
 
         def action() -> None:
             self._transaction_service.update_transaction(

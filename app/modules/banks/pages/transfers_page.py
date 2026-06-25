@@ -19,6 +19,7 @@ from app.core.exceptions import AppError, ValidationError
 from app.modules.banks.dialogs.add_transfer_dialog import AddTransferDialog
 from app.modules.banks.pages._ui_helpers import show_error, show_success
 from app.services.account_service import AccountService
+from app.services.transaction_service import TransactionService
 from app.services.transfer_service import TransferService
 
 
@@ -29,6 +30,7 @@ class TransfersPage(QWidget):
         super().__init__(parent)
         self._service = TransferService()
         self._account_service = AccountService()
+        self._transaction_service = TransactionService()
         self._rows: List[Dict[str, Any]] = []
         self._build_ui()
         self.refresh()
@@ -153,8 +155,22 @@ class TransfersPage(QWidget):
         dialog = AddTransferDialog(accounts, self.window())
         if not dialog.exec_():
             return
+        values = dialog.get_values()
+
+        warning = self._transaction_service.negative_balance_warning(
+            values.get("from_account_id"),
+            "out",
+            str(values.get("from_amount_text") or ""),
+        )
+        if warning:
+            confirm = MessageBox("Bakiye Uyarısı", warning, self.window())
+            confirm.yesButton.setText("Devam Et")
+            confirm.cancelButton.setText("İptal")
+            if not confirm.exec_():
+                return
+
         try:
-            self._service.create_transfer(dialog.get_values())
+            self._service.create_transfer(values)
             show_success(self, "Başarılı", "Transfer kaydedildi.")
             self.refresh()
         except ValidationError as exc:

@@ -23,6 +23,7 @@ from app.modules.banks.pages._ui_helpers import show_error, show_success
 from app.services.account_service import AccountService
 from app.services.debt_plan_service import DebtPlanService
 from app.services.reference_service import ReferenceService
+from app.services.transaction_service import TransactionService
 
 
 class DebtPlanDetailDialog(QDialog):
@@ -43,6 +44,7 @@ class DebtPlanDetailDialog(QDialog):
         self._service = debt_plan_service or DebtPlanService()
         self._account_service = account_service or AccountService()
         self._reference_service = reference_service or ReferenceService()
+        self._transaction_service = TransactionService()
         self._on_changed = on_changed
 
         self.setWindowTitle("Plan Detayı")
@@ -239,6 +241,19 @@ class DebtPlanDetailDialog(QDialog):
             return
 
         payment = dialog.get_payment_data()
+
+        warning = self._transaction_service.negative_balance_warning_for_amount(
+            payment["account_id"],
+            "out",
+            int(installment["total_amount"]),
+        )
+        if warning:
+            confirm = MessageBox("Bakiye Uyarısı", warning, self.window())
+            confirm.yesButton.setText("Devam Et")
+            confirm.cancelButton.setText("İptal")
+            if not confirm.exec_():
+                return
+
         try:
             self._service.pay_installment(
                 payment["installment_id"],
