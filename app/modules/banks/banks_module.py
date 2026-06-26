@@ -10,6 +10,7 @@ from app.modules.banks.pages.bank_summary_page import BankSummaryPage
 from app.modules.banks.pages.credit_cards_page import CreditCardsPage
 from app.modules.banks.pages.definitions_page import DefinitionsPage
 from app.modules.banks.pages.installment_advances_page import InstallmentAdvancesPage
+from app.modules.banks.pages.installment_purchases_page import InstallmentPurchasesPage
 from app.modules.banks.pages.kmh_page import KmhPage
 from app.modules.banks.pages.loans_page import LoansPage
 from app.modules.banks.pages.reports_page import ReportsPage
@@ -28,6 +29,7 @@ BANK_NAV_ITEMS: List[BankNavItem] = [
     ("kmh", KmhPage, FluentIcon.CONNECT, "KMH / Ek Hesap"),
     ("loans", LoansPage, FluentIcon.DOCUMENT, "Krediler"),
     ("installment_advances", InstallmentAdvancesPage, FluentIcon.CALENDAR, "Taksitli Avanslar"),
+    ("installment_purchases", InstallmentPurchasesPage, FluentIcon.SHOPPING_CART, "Taksitli Alışveriş"),
     ("transactions", TransactionsPage, FluentIcon.HISTORY, "Para Hareketleri"),
     ("transfers", TransfersPage, FluentIcon.SEND, "Transferler"),
     ("definitions", DefinitionsPage, FluentIcon.SETTING, "Tanımlar"),

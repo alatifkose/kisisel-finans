@@ -26,7 +26,12 @@ from qfluentwidgets import (
     TextEdit,
 )
 
-from app.core.constants import PLAN_KIND_LABELS, PlanKind, VALID_PLAN_KINDS
+from app.core.constants import (
+    CARD_SOURCE_PLAN_KINDS,
+    PLAN_KIND_LABELS,
+    PlanKind,
+    VALID_PLAN_KINDS,
+)
 from app.core.money import format_amount
 from app.modules.banks.dialogs.installment_edit_dialog import InstallmentEditDialog
 from app.services.credit_card_service import CreditCardService
@@ -169,13 +174,13 @@ class AddDebtPlanDialog(QDialog):
         self._refresh_source_options()
 
     def _sync_source_visibility(self) -> None:
-        is_ca = self.kind_combo.currentData() == PlanKind.CASH_ADVANCE_INSTALLMENT
+        is_card = self.kind_combo.currentData() in CARD_SOURCE_PLAN_KINDS
         is_kmh = self.kind_combo.currentData() == PlanKind.KMH_INSTALLMENT
-        self.source_card_combo.setVisible(is_ca)
-        self.source_card_combo.setEnabled(is_ca)
+        self.source_card_combo.setVisible(is_card)
+        self.source_card_combo.setEnabled(is_card)
         self.source_kmh_combo.setVisible(is_kmh)
         self.source_kmh_combo.setEnabled(is_kmh)
-        if not is_ca:
+        if not is_card:
             self.source_card_combo.setCurrentIndex(0)
         if not is_kmh:
             self.source_kmh_combo.setCurrentIndex(0)
@@ -185,7 +190,7 @@ class AddDebtPlanDialog(QDialog):
         currency = self.currency_combo.currentData()
         plan_kind = self.kind_combo.currentData()
 
-        if plan_kind == PlanKind.CASH_ADVANCE_INSTALLMENT:
+        if plan_kind in CARD_SOURCE_PLAN_KINDS:
             selected_card = self.source_card_combo.currentData()
             self.source_card_combo.blockSignals(True)
             self.source_card_combo.clear()
@@ -361,7 +366,7 @@ class AddDebtPlanDialog(QDialog):
         plan_kind = self.kind_combo.currentData()
         source_card_id = None
         source_kmh_id = None
-        if plan_kind == PlanKind.CASH_ADVANCE_INSTALLMENT:
+        if plan_kind in CARD_SOURCE_PLAN_KINDS:
             source_card_id = self.source_card_combo.currentData()
         if plan_kind == PlanKind.KMH_INSTALLMENT:
             source_kmh_id = self.source_kmh_combo.currentData()
