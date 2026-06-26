@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 from qfluentwidgets import (
-    BodyLabel,
     ComboBox,
     LineEdit,
     PrimaryPushButton,
@@ -140,16 +139,6 @@ class AddDebtPlanDialog(QDialog):
         self._form = form
         layout.addLayout(form)
 
-        # Taksitli nakit avans için bilgilendirme (basit mod)
-        self.ca_info_label = BodyLabel(
-            "Taksitli nakit avansta taksitleri tek tek girmene gerek yok. "
-            "Ana para, taksit sayısı ve aylık taksit tutarını gir; "
-            "sistem anapara/faiz dağılımını ve tüm taksitleri otomatik üretir.",
-            self,
-        )
-        self.ca_info_label.setWordWrap(True)
-        layout.addWidget(self.ca_info_label)
-
         self.manual_section = QWidget(self)
         manual_layout = QVBoxLayout(self.manual_section)
         manual_layout.setContentsMargins(0, 0, 0, 0)
@@ -236,7 +225,6 @@ class AddDebtPlanDialog(QDialog):
         self._set_row_visible(self.ca_monthly_edit, simple_ca)
         self._set_row_visible(self.ca_first_due_edit, simple_ca)
         self._set_row_visible(self.interest_edit, not simple_ca)
-        self.ca_info_label.setVisible(simple_ca)
         self.manual_section.setVisible(not simple_ca)
 
     def _refresh_source_options(self) -> None:
