@@ -10,6 +10,7 @@ from app.repositories.credit_card_repository import CreditCardRepository
 from app.repositories.debt_plan_repository import DebtPlanRepository
 from app.repositories.kmh_repository import KmhRepository
 from app.repositories.summary_repository import SummaryRepository
+from app.services.card_statement_service import CardStatementService
 
 
 class SummaryService:
@@ -28,11 +29,13 @@ class SummaryService:
         debt_plan_repo: Optional[DebtPlanRepository] = None,
         credit_card_repo: Optional[CreditCardRepository] = None,
         kmh_repo: Optional[KmhRepository] = None,
+        card_statement_service: Optional[CardStatementService] = None,
     ) -> None:
         self._summary_repo = summary_repo or SummaryRepository()
         self._debt_plan_repo = debt_plan_repo or DebtPlanRepository()
         self._credit_card_repo = credit_card_repo or CreditCardRepository()
         self._kmh_repo = kmh_repo or KmhRepository()
+        self._statement_service = card_statement_service or CardStatementService()
 
     def get_bank_summary(self) -> Dict[str, Any]:
         today = date.today()
@@ -240,11 +243,25 @@ class SummaryService:
         return formatted
 
     def get_credit_card_debts_by_currency(self) -> List[Dict[str, Any]]:
-        rows = self._credit_card_repo.get_credit_card_debts_by_currency()
-        formatted: List[Dict[str, Any]] = []
-        for row in rows:
-            if int(row.get("statement_debt_total") or 0) == 0:
+        """Para birimi bazında kredi kartı borcu = türetilen ekstrenin güncel
+        dönem borçları toplamı (aktif kartlar)."""
+        totals: Dict[int, Dict[str, Any]] = {}
+        for card in self._credit_card_repo.list_credit_cards(include_inactive=False):
+            debt = self._statement_service.get_current_statement_debt(int(card["id"]))
+            if debt == 0:
                 continue
+            cid = int(card["currency_id"])
+            if cid not in totals:
+                totals[cid] = {
+                    "currency_id": cid,
+                    "currency_code": card["currency_code"],
+                    "currency_symbol": card.get("currency_symbol") or "",
+                    "scale": int(card["scale"]),
+                    "statement_debt_total": 0,
+                }
+            totals[cid]["statement_debt_total"] += debt
+        formatted: List[Dict[str, Any]] = []
+        for row in sorted(totals.values(), key=lambda r: r["currency_code"]):
             formatted.append(
                 {
                     **row,
