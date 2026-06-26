@@ -258,6 +258,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_card_statement_date
 ON card_statements(credit_card_id, statement_date)
 WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS card_entries (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    credit_card_id  INTEGER NOT NULL REFERENCES credit_cards(id),
+    txn_date        DATE NOT NULL,
+    entry_type      TEXT NOT NULL,
+    amount          INTEGER NOT NULL,
+    category_id     INTEGER NULL REFERENCES categories(id),
+    description     TEXT,
+    note            TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      TIMESTAMP NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_card_entries_card
+ON card_entries(credit_card_id)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS ix_card_entries_date
+ON card_entries(txn_date)
+WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS kmh_accounts (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     bank_id             INTEGER NOT NULL REFERENCES banks(id),

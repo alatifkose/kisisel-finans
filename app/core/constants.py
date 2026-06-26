@@ -36,6 +36,15 @@ class PlanKind:
     CASH_ADVANCE_INSTALLMENT = "ca_installment"
 
 
+class CardEntryType:
+    """Kredi kartı tekil hareketleri (taksitli planlar debt_plans'ta yaşar)."""
+    PURCHASE = "purchase"          # alışveriş (gider)
+    CASH_ADVANCE = "cash_advance"  # tek çekim nakit avans (taksitsiz)
+    PAYMENT = "payment"            # kart borcu ödemesi (borcu azaltır)
+    FEE = "fee"                    # ücret / aidat (gider)
+    INTEREST = "interest"          # faiz (gider)
+
+
 class InstallmentStatus:
     PLANNED = "planned"
     PARTIAL = "partial"
@@ -109,3 +118,38 @@ VALID_PLAN_KINDS = [
     PlanKind.KMH_INSTALLMENT,
     PlanKind.CASH_ADVANCE_INSTALLMENT,
 ]
+
+CARD_ENTRY_TYPE_LABELS = {
+    CardEntryType.PURCHASE: "Alışveriş",
+    CardEntryType.CASH_ADVANCE: "Nakit Avans",
+    CardEntryType.PAYMENT: "Ödeme",
+    CardEntryType.FEE: "Ücret / Aidat",
+    CardEntryType.INTEREST: "Faiz",
+}
+
+VALID_CARD_ENTRY_TYPES = [
+    CardEntryType.PURCHASE,
+    CardEntryType.CASH_ADVANCE,
+    CardEntryType.PAYMENT,
+    CardEntryType.FEE,
+    CardEntryType.INTEREST,
+]
+
+# Borcu artıran (+) ve azaltan (−) hareket türleri
+CARD_DEBT_INCREASING_ENTRY_TYPES = {
+    CardEntryType.PURCHASE,
+    CardEntryType.CASH_ADVANCE,
+    CardEntryType.FEE,
+    CardEntryType.INTEREST,
+}
+CARD_DEBT_DECREASING_ENTRY_TYPES = {CardEntryType.PAYMENT}
+
+# Nakit avans niteliğinde (nakit avans limitini tüketen) türler
+CARD_CASH_ADVANCE_ENTRY_TYPES = {CardEntryType.CASH_ADVANCE}
+
+# Gider niteliğinde (kategori taşıyabilen, "ne harcadım"a giren) türler
+CARD_EXPENSE_ENTRY_TYPES = {
+    CardEntryType.PURCHASE,
+    CardEntryType.FEE,
+    CardEntryType.INTEREST,
+}
