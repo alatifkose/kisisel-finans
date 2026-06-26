@@ -127,7 +127,7 @@ class KmhAccountDialog(_BaseKmhDialog):
         for account in self._all_accounts:
             if account["id"] == account_id:
                 self.currency_label.setText(
-                    f"{account.get('currency_code', '')} (scale={account.get('currency_scale', 2)})"
+                    f"{account.get('currency_code', '')} {account.get('currency_symbol') or ''}".strip()
                 )
                 return
 

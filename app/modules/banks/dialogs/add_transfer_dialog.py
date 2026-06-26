@@ -98,7 +98,7 @@ class AddTransferDialog(QDialog):
             self.from_currency_label.setText("—")
         else:
             self.from_currency_label.setText(
-                f"{account.get('currency_code', '')} (scale={account.get('currency_scale', 2)})"
+                f"{account.get('currency_code', '')} {account.get('currency_symbol') or ''}".strip()
             )
         self._sync_same_currency_to_amount()
 
@@ -108,7 +108,7 @@ class AddTransferDialog(QDialog):
             self.to_currency_label.setText("—")
         else:
             self.to_currency_label.setText(
-                f"{account.get('currency_code', '')} (scale={account.get('currency_scale', 2)})"
+                f"{account.get('currency_code', '')} {account.get('currency_symbol') or ''}".strip()
             )
         self._sync_same_currency_to_amount()
 
