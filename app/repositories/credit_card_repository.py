@@ -475,6 +475,7 @@ class CreditCardRepository:
                     cc.id,
                     cc.currency_id,
                     cc.cash_advance_limit,
+                    -- Taksitli nakit avans ödenmemiş anaparası
                     COALESCE((
                         SELECT SUM(ic.amount)
                         FROM debt_plans dp
@@ -489,7 +490,22 @@ class CreditCardRepository:
                         WHERE dp.source_card_id = cc.id
                           AND dp.plan_kind = 'ca_installment'
                           AND dp.deleted_at IS NULL
-                    ), 0) AS outstanding
+                    ), 0)
+                    -- Taksitsiz nakit avans hareketleri eksi ödemeler (banka
+                    -- ödemeyi önce en yüksek faizli nakit avansa kapatır).
+                    + MAX(
+                        COALESCE((
+                            SELECT SUM(amount) FROM card_entries
+                            WHERE credit_card_id = cc.id AND deleted_at IS NULL
+                              AND entry_type = 'cash_advance'
+                        ), 0)
+                        - COALESCE((
+                            SELECT SUM(amount) FROM card_entries
+                            WHERE credit_card_id = cc.id AND deleted_at IS NULL
+                              AND entry_type = 'payment'
+                        ), 0),
+                        0
+                    ) AS outstanding
                 FROM credit_cards cc
                 WHERE cc.deleted_at IS NULL
                   AND cc.is_active = 1
