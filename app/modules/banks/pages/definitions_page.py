@@ -25,6 +25,7 @@ from app.modules.banks.dialogs.reference_dialogs import (
     CurrencyDialog,
 )
 from app.services.reference_service import ReferenceService
+from app.ui.table_utils import autosize_columns
 
 
 def _active_label(value: Any) -> str:
@@ -65,6 +66,9 @@ class ReferenceTabBase(QWidget):
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
+        # İlk sütun veritabanı ID'si yerine sıra numarası gösterir.
+        if columns and columns[0] == "ID":
+            columns = ["#"] + columns[1:]
         self._service = service
         self._columns = columns
         self._rows: List[Dict[str, Any]] = []
@@ -106,8 +110,11 @@ class ReferenceTabBase(QWidget):
     def _populate_table(self, rows: List[List[str]]) -> None:
         self.table.setRowCount(len(rows))
         for row_index, row_values in enumerate(rows):
-            for col_index, value in enumerate(row_values):
+            # İlk sütun sıra numarası; alt sekmeler ID geçse de gösterimde değiştirilir.
+            display_values = [row_index + 1] + list(row_values[1:])
+            for col_index, value in enumerate(display_values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        autosize_columns(self.table)
 
     def _selected_row(self) -> Optional[Dict[str, Any]]:
         selected = self.table.selectionModel().selectedRows()

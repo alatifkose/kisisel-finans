@@ -17,6 +17,7 @@ from qfluentwidgets import BodyLabel, ComboBox, MessageBox, PrimaryPushButton, P
 from app.core.exceptions import AppError, ValidationError
 from app.modules.banks.dialogs.kmh_dialogs import KmhAccountDialog, KmhUsageDialog
 from app.modules.banks.pages._ui_helpers import active_label, show_error, show_info, show_success
+from app.ui.table_utils import autosize_columns
 from app.services.account_service import AccountService
 from app.services.bank_service import BankService
 from app.services.kmh_service import KmhService
@@ -70,7 +71,7 @@ class KmhPage(QWidget):
         self.table.setColumnCount(12)
         self.table.setHorizontalHeaderLabels(
             [
-                "ID",
+                "#",
                 "Banka",
                 "Bağlı Hesap",
                 "Para Birimi",
@@ -123,7 +124,7 @@ class KmhPage(QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, row in enumerate(self._rows):
             values = [
-                row["id"],
+                row_index + 1,
                 row["bank_name"],
                 row["account_name"],
                 row["currency_code"],
@@ -138,6 +139,7 @@ class KmhPage(QWidget):
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        autosize_columns(self.table)
 
     def _selected_row(self) -> Optional[Dict[str, Any]]:
         selected = self.table.selectionModel().selectedRows()

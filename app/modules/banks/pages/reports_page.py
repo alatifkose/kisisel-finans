@@ -22,6 +22,7 @@ from qfluentwidgets import BodyLabel, MessageBox, PushButton, TitleLabel
 from app.core.constants import INSTALLMENT_STATUS_LABELS
 from app.core.exceptions import AppError, ValidationError
 from app.modules.banks.pages._ui_helpers import show_error, show_success
+from app.ui.table_utils import autosize_columns
 from app.services.account_service import AccountService
 from app.services.audit_service import AuditService
 from app.services.report_service import ReportService
@@ -32,6 +33,7 @@ def _fill_table(table: QTableWidget, rows: List[List[str]]) -> None:
     for row_index, values in enumerate(rows):
         for col_index, value in enumerate(values):
             table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+    autosize_columns(table)
 
 
 def _make_date_edit(default: Optional[QDate] = None) -> QDateEdit:

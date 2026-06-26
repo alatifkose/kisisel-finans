@@ -18,6 +18,7 @@ from qfluentwidgets import MessageBox, PrimaryPushButton, PushButton, SubtitleLa
 from app.core.exceptions import AppError, ValidationError
 from app.modules.banks.dialogs.credit_card_dialogs import CardStatementDialog, CreditCardDialog
 from app.modules.banks.pages._ui_helpers import active_label, show_error, show_success
+from app.ui.table_utils import autosize_columns
 from app.services.bank_service import BankService
 from app.services.credit_card_service import CreditCardService
 from app.services.reference_service import ReferenceService
@@ -69,7 +70,7 @@ class CreditCardsPage(QWidget):
         self.cards_table.setColumnCount(11)
         self.cards_table.setHorizontalHeaderLabels(
             [
-                "ID",
+                "#",
                 "Banka",
                 "Kart Adı",
                 "Para Birimi",
@@ -114,7 +115,7 @@ class CreditCardsPage(QWidget):
         self.statements_table.setColumnCount(7)
         self.statements_table.setHorizontalHeaderLabels(
             [
-                "ID",
+                "#",
                 "Ekstre Tarihi",
                 "Ekstre Borcu",
                 "Asgari Ödeme",
@@ -156,7 +157,7 @@ class CreditCardsPage(QWidget):
             if latest:
                 latest_debt = latest["statement_debt_display"]["display"]
             values = [
-                card["id"],
+                row_index + 1,
                 card["bank_name"],
                 card["name"],
                 card["currency_code"],
@@ -170,6 +171,7 @@ class CreditCardsPage(QWidget):
             ]
             for col_index, value in enumerate(values):
                 self.cards_table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        autosize_columns(self.cards_table)
         self._load_statements()
 
     def _selected_card(self) -> Optional[Dict[str, Any]]:
@@ -201,7 +203,7 @@ class CreditCardsPage(QWidget):
         for row_index, stmt in enumerate(self._statements):
             available = stmt.get("available_limit_display", {}).get("display", "—")
             values = [
-                stmt["id"],
+                row_index + 1,
                 stmt["statement_date"],
                 stmt["statement_debt_display"]["display"],
                 stmt["min_payment_display"]["display"],
@@ -213,6 +215,7 @@ class CreditCardsPage(QWidget):
                 self.statements_table.setItem(
                     row_index, col_index, QTableWidgetItem(str(value))
                 )
+        autosize_columns(self.statements_table)
 
     def _on_add_card(self) -> None:
         banks = self._bank_service.list_banks()

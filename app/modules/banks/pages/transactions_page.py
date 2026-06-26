@@ -25,6 +25,7 @@ from app.core.exceptions import AppError, ValidationError
 from app.core.money import format_amount
 from app.modules.banks.dialogs.add_transaction_dialog import AddTransactionDialog
 from app.modules.banks.pages._ui_helpers import active_label, show_error, show_success
+from app.ui.table_utils import autosize_columns
 from app.services.account_service import AccountService
 from app.services.reference_service import ReferenceService
 from app.services.transaction_service import TransactionService
@@ -75,7 +76,7 @@ class TransactionsPage(QWidget):
         self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(
             [
-                "ID",
+                "#",
                 "Tarih",
                 "Banka",
                 "Hesap",
@@ -118,7 +119,7 @@ class TransactionsPage(QWidget):
         for row_index, row in enumerate(self._rows):
             scale = int(row["currency_scale"])
             values = [
-                row["id"],
+                row_index + 1,
                 row["txn_date"],
                 row["bank_name"],
                 row["account_name"],
@@ -130,6 +131,7 @@ class TransactionsPage(QWidget):
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        autosize_columns(self.table)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

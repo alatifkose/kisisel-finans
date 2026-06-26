@@ -17,6 +17,7 @@ from qfluentwidgets import MessageBox, PrimaryPushButton, PushButton, SubtitleLa
 from app.core.exceptions import AppError, ValidationError
 from app.modules.banks.dialogs.bank_account_dialogs import BankDialog
 from app.modules.banks.pages._ui_helpers import active_label, show_error, show_success
+from app.ui.table_utils import autosize_columns
 from app.services.bank_service import BankService
 
 
@@ -51,7 +52,7 @@ class BankManagementSection(QWidget):
         self.bank_table = QTableWidget(self)
         self.bank_table.setColumnCount(5)
         self.bank_table.setHorizontalHeaderLabels(
-            ["ID", "Banka Adı", "Kısa Ad", "Aktif", "Not"]
+            ["#", "Banka Adı", "Kısa Ad", "Aktif", "Not"]
         )
         self.bank_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.bank_table.setSelectionMode(QTableWidget.SingleSelection)
@@ -70,7 +71,7 @@ class BankManagementSection(QWidget):
         self.bank_table.setRowCount(len(self._bank_rows))
         for row_index, row in enumerate(self._bank_rows):
             values = [
-                row["id"],
+                row_index + 1,
                 row["name"],
                 row.get("short_name") or "",
                 active_label(row["is_active"]),
@@ -82,6 +83,7 @@ class BankManagementSection(QWidget):
                     col_index,
                     QTableWidgetItem(str(value)),
                 )
+        autosize_columns(self.bank_table)
 
     def _selected_bank(self) -> Optional[Dict[str, Any]]:
         selected = self.bank_table.selectionModel().selectedRows()

@@ -19,6 +19,7 @@ from app.core.exceptions import AppError, ValidationError
 from app.modules.banks.dialogs.add_debt_plan_dialog import AddDebtPlanDialog
 from app.modules.banks.dialogs.debt_plan_detail_dialog import DebtPlanDetailDialog
 from app.modules.banks.pages._ui_helpers import active_label, show_error, show_success
+from app.ui.table_utils import autosize_columns
 from app.services.bank_service import BankService
 from app.services.debt_plan_service import DebtPlanService
 from app.services.reference_service import ReferenceService
@@ -88,7 +89,7 @@ class DebtPlansPageBase(QWidget):
         button_row.addStretch()
         layout.addLayout(button_row)
 
-        headers = ["ID", "Banka", "Plan Adı", "Ana Para", "Para Birimi", "Başlangıç Tarihi",
+        headers = ["#", "Banka", "Plan Adı", "Ana Para", "Para Birimi", "Başlangıç Tarihi",
                    "Taksit Sayısı", "Ödenmemiş Toplam", "Sonraki Vade", "Aktif", "Not"]
         if self._show_kind_column:
             headers.insert(1, "Tür")
@@ -138,7 +139,7 @@ class DebtPlansPageBase(QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, row in enumerate(self._rows):
             values = [
-                row["id"],
+                row_index + 1,
                 row["bank_name"],
                 row["name"],
                 row["principal_amount_display"]["display"],
@@ -157,6 +158,7 @@ class DebtPlansPageBase(QWidget):
                 values.insert(insert_at, self._format_plan_source(row))
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        autosize_columns(self.table)
 
     @staticmethod
     def _format_plan_source(row: Dict[str, Any]) -> str:

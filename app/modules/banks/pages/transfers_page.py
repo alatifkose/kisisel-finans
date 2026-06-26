@@ -21,6 +21,7 @@ from app.modules.banks.pages._ui_helpers import show_error, show_success
 from app.services.account_service import AccountService
 from app.services.transaction_service import TransactionService
 from app.services.transfer_service import TransferService
+from app.ui.table_utils import autosize_columns
 
 
 class TransfersPage(QWidget):
@@ -66,7 +67,7 @@ class TransfersPage(QWidget):
         self.table.setColumnCount(13)
         self.table.setHorizontalHeaderLabels(
             [
-                "ID",
+                "#",
                 "Tarih",
                 "Kaynak Banka",
                 "Kaynak Hesap",
@@ -118,7 +119,7 @@ class TransfersPage(QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, row in enumerate(self._rows):
             values = [
-                row["id"],
+                row_index + 1,
                 row["transfer_date"],
                 row["from_bank_name"],
                 row["from_account_name"],
@@ -133,6 +134,7 @@ class TransfersPage(QWidget):
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        autosize_columns(self.table)
 
     def _selected_row(self) -> Optional[Dict[str, Any]]:
         selected = self.table.selectionModel().selectedRows()
