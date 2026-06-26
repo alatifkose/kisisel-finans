@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Set
 
 from app.core.constants import (
+    CARD_SOURCE_PLAN_KINDS,
     InstallmentStatus,
     Nature,
     PlanKind,
@@ -571,9 +572,10 @@ class DebtPlanService:
             )
 
         if card_id is not None:
-            if plan_kind != PlanKind.CASH_ADVANCE_INSTALLMENT:
+            if plan_kind not in CARD_SOURCE_PLAN_KINDS:
                 raise ValidationError(
-                    "Kaynak kredi kartı yalnızca taksitli nakit avans planları için seçilebilir."
+                    "Kaynak kredi kartı yalnızca taksitli nakit avans veya "
+                    "taksitli alışveriş planları için seçilebilir."
                 )
             card = self._credit_card_repo.get_credit_card(card_id)
             if card is None or not card.get("is_active"):

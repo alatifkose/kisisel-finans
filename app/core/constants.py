@@ -34,6 +34,7 @@ class PlanKind:
     LOAN = "loan"
     KMH_INSTALLMENT = "kmh_installment"
     CASH_ADVANCE_INSTALLMENT = "ca_installment"
+    PURCHASE_INSTALLMENT = "purchase_installment"  # taksitli alışveriş (kart)
 
 
 class CardEntryType:
@@ -105,6 +106,13 @@ PLAN_KIND_LABELS = {
     PlanKind.LOAN: "Kredi",
     PlanKind.KMH_INSTALLMENT: "Taksitli KMH / Ek Hesap",
     PlanKind.CASH_ADVANCE_INSTALLMENT: "Taksitli Nakit Avans",
+    PlanKind.PURCHASE_INSTALLMENT: "Taksitli Alışveriş",
+}
+
+# Kaynağı kredi kartı olabilen plan türleri
+CARD_SOURCE_PLAN_KINDS = {
+    PlanKind.CASH_ADVANCE_INSTALLMENT,
+    PlanKind.PURCHASE_INSTALLMENT,
 }
 
 INSTALLMENT_STATUS_LABELS = {
@@ -117,6 +125,7 @@ VALID_PLAN_KINDS = [
     PlanKind.LOAN,
     PlanKind.KMH_INSTALLMENT,
     PlanKind.CASH_ADVANCE_INSTALLMENT,
+    PlanKind.PURCHASE_INSTALLMENT,
 ]
 
 CARD_ENTRY_TYPE_LABELS = {
