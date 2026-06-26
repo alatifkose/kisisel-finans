@@ -455,9 +455,11 @@ class CreditCardRepository:
     def get_cash_advance_available_by_currency(self) -> List[Dict[str, Any]]:
         """Para birimi bazında kullanılabilir nakit avans toplamı.
 
-        Kart başına: cash_advance_limit - ödenmemiş nakit avans anaparası
-        (taksitli nakit avans planlarının ödenmemiş taksitlerindeki anapara
-        bileşenleri). Negatif olamaz. Yalnızca cash_advance_limit > 0 kartlar.
+        Kart başına: cash_advance_limit - ödenmemiş nakit avans toplam borcu.
+        Banka, taksitli nakit avansın faizi dahil tüm borcu çekildiği anda
+        bloke eder; her ödenen taksitle limit geri açılır. Bu yüzden ödenmemiş
+        taksitlerin TOPLAM tutarı (anapara + faiz) düşülür. Negatif olamaz.
+        Yalnızca cash_advance_limit > 0 kartlar.
         """
         sql = """
             SELECT
@@ -475,18 +477,15 @@ class CreditCardRepository:
                     cc.id,
                     cc.currency_id,
                     cc.cash_advance_limit,
-                    -- Taksitli nakit avans ödenmemiş anaparası
+                    -- Taksitli nakit avans ödenmemiş TOPLAM borcu (anapara + faiz);
+                    -- banka faizi dahil tümünü peşinen bloke eder.
                     COALESCE((
-                        SELECT SUM(ic.amount)
+                        SELECT SUM(i.total_amount)
                         FROM debt_plans dp
                         JOIN installments i
                             ON i.debt_plan_id = dp.id
                             AND i.deleted_at IS NULL
                             AND i.status != 'paid'
-                        JOIN installment_components ic
-                            ON ic.installment_id = i.id AND ic.deleted_at IS NULL
-                        JOIN component_types ct
-                            ON ct.id = ic.component_type_id AND ct.nature = 'principal'
                         WHERE dp.source_card_id = cc.id
                           AND dp.plan_kind = 'ca_installment'
                           AND dp.deleted_at IS NULL

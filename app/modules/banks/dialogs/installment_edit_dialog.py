@@ -116,9 +116,14 @@ class InstallmentEditDialog(QDialog):
 
     def _remove_component_row(self) -> None:
         selected = self.comp_table.selectionModel().selectedRows()
-        if not selected:
+        if selected:
+            self.comp_table.removeRow(selected[0].row())
             return
-        self.comp_table.removeRow(selected[0].row())
+        # Hücrelerde widget (ComboBox/LineEdit) olduğu için satır seçimi her
+        # zaman gerçekleşmeyebilir; seçim yoksa son satırı kaldır.
+        row_count = self.comp_table.rowCount()
+        if row_count > 0:
+            self.comp_table.removeRow(row_count - 1)
 
     def _load_data(self, data: Dict[str, Any]) -> None:
         self.seq_spin.setValue(int(data["seq"]))

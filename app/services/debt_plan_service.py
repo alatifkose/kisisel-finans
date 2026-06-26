@@ -18,7 +18,7 @@ from app.core.constants import (
 from app.core.database import get_connection
 from app.core.event_bus import event_bus
 from app.core.exceptions import AppError, NotFoundError, RepositoryError, ValidationError
-from app.core.money import format_amount_with_grouping, parse_amount
+from app.core.money import format_amount, format_amount_with_grouping, parse_amount
 from app.core.validators import is_non_empty_text
 from app.repositories.account_repository import AccountRepository
 from app.repositories.bank_repository import BankRepository
@@ -517,6 +517,10 @@ class DebtPlanService:
         note = self._normalize_optional_text(data.get("note"))
 
         raw_installments = data.get("installments") or []
+        if not raw_installments and plan_kind == PlanKind.CASH_ADVANCE_INSTALLMENT:
+            # Taksitli nakit avans: taksitler elle girilmediyse ana para,
+            # taksit sayısı ve aylık taksit tutarından otomatik üret.
+            raw_installments = self._generate_ca_installments(data, principal_amount, scale)
         if not raw_installments:
             raise ValidationError("En az bir taksit zorunludur.")
 
@@ -606,6 +610,106 @@ class DebtPlanService:
             raise ValidationError("Kredi planında kaynak kart veya KMH seçilemez.")
 
         return card_id, kmh_id
+
+    @staticmethod
+    def _add_months(date_str: str, months: int) -> str:
+        """'yyyy-MM-dd' tarihine ay ekler; gün ay sonunu aşarsa ay sonuna sabitler."""
+        import calendar
+
+        year, month, day = (int(part) for part in date_str.split("-"))
+        total = (month - 1) + months
+        new_year = year + total // 12
+        new_month = total % 12 + 1
+        last_day = calendar.monthrange(new_year, new_month)[1]
+        new_day = min(day, last_day)
+        return f"{new_year:04d}-{new_month:02d}-{new_day:02d}"
+
+    def _generate_ca_installments(
+        self,
+        data: Dict[str, Any],
+        principal_amount: int,
+        scale: int,
+    ) -> List[Dict[str, Any]]:
+        """Taksitli nakit avans taksitlerini eşit (yuvarlama farkı son taksitte)
+        anapara + faiz bileşenleriyle üretir."""
+        count = int(data.get("ca_installment_count") or 0)
+        if count <= 0:
+            raise ValidationError("Taksitli nakit avans için taksit sayısı girilmelidir.")
+        if principal_amount <= 0:
+            raise ValidationError("Taksitli nakit avansta ana para sıfırdan büyük olmalıdır.")
+
+        monthly = self._parse_amount_required(
+            str(data.get("ca_monthly_payment_text") or ""),
+            scale,
+            "Aylık taksit tutarı",
+        )
+        if monthly <= 0:
+            raise ValidationError("Aylık taksit tutarı sıfırdan büyük olmalıdır.")
+
+        first_due = str(
+            data.get("ca_first_due_date") or data.get("start_date") or ""
+        ).strip()
+        if not first_due:
+            raise ValidationError("Taksitli nakit avans için ilk taksit vadesi girilmelidir.")
+
+        total_repay = monthly * count
+        total_interest = total_repay - principal_amount
+        if total_interest < 0:
+            raise ValidationError(
+                "Aylık taksit tutarı × taksit sayısı, ana paradan küçük olamaz."
+            )
+
+        type_ids = {
+            str(ct["code"]): int(ct["id"])
+            for ct in self._component_type_repo.list_component_types()
+        }
+        principal_type_id = type_ids.get("principal")
+        interest_type_id = type_ids.get("interest")
+        if principal_type_id is None:
+            raise ValidationError("'Anapara' bileşen tipi tanımlı değil.")
+        if total_interest > 0 and interest_type_id is None:
+            raise ValidationError("'Faiz' bileşen tipi tanımlı değil.")
+
+        principal_each = principal_amount // count
+        interest_each = total_interest // count
+
+        raw: List[Dict[str, Any]] = []
+        principal_acc = 0
+        for k in range(1, count + 1):
+            if k < count:
+                principal_k = principal_each
+                interest_k = interest_each
+            else:
+                # Son taksit yuvarlama farkını üstlenir.
+                principal_k = principal_amount - principal_each * (count - 1)
+                interest_k = total_interest - interest_each * (count - 1)
+            principal_acc += principal_k
+            remaining_after = principal_amount - principal_acc
+
+            components = [
+                {
+                    "component_type_id": principal_type_id,
+                    "amount_text": format_amount(principal_k, scale),
+                }
+            ]
+            if interest_k > 0:
+                components.append(
+                    {
+                        "component_type_id": interest_type_id,
+                        "amount_text": format_amount(interest_k, scale),
+                    }
+                )
+
+            raw.append(
+                {
+                    "seq": k,
+                    "due_date": self._add_months(first_due, k - 1),
+                    "total_amount_text": format_amount(principal_k + interest_k, scale),
+                    "remaining_principal_after_text": format_amount(remaining_after, scale),
+                    "components": components,
+                }
+            )
+        return raw
 
     def _parse_installments(
         self,

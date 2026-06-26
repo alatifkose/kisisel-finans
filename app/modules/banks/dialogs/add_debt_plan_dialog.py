@@ -17,10 +17,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 from qfluentwidgets import (
+    BodyLabel,
     ComboBox,
     LineEdit,
     PrimaryPushButton,
     PushButton,
+    SpinBox,
     SubtitleLabel,
     SwitchButton,
     TextEdit,
@@ -92,6 +94,17 @@ class AddDebtPlanDialog(QDialog):
         self.principal_edit = LineEdit(self)
         self.interest_edit = LineEdit(self)
         self.interest_edit.setPlaceholderText("Opsiyonel")
+
+        # Taksitli nakit avansa özel basit giriş alanları
+        self.ca_count_spin = SpinBox(self)
+        self.ca_count_spin.setRange(1, 360)
+        self.ca_count_spin.setValue(3)
+        self.ca_monthly_edit = LineEdit(self)
+        self.ca_monthly_edit.setPlaceholderText("Aylık ödeyeceğin taksit (faiz dahil)")
+        self.ca_first_due_edit = QDateEdit(self)
+        self.ca_first_due_edit.setCalendarPopup(True)
+        self.ca_first_due_edit.setDisplayFormat("dd.MM.yyyy")
+        self.ca_first_due_edit.setDate(QDate.currentDate())
         self.start_date_edit = QDateEdit(self)
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setDisplayFormat("dd.MM.yyyy")
@@ -111,26 +124,47 @@ class AddDebtPlanDialog(QDialog):
         form.addRow("Para Birimi", self.currency_combo)
         form.addRow("Kaynak Kredi Kartı", self.source_card_combo)
         form.addRow("Kaynak KMH / Ek Hesap", self.source_kmh_combo)
-        form.addRow("Ana Para", self.principal_edit)
+        form.addRow("Ana Para (elime geçen)", self.principal_edit)
+        form.addRow("Taksit Sayısı", self.ca_count_spin)
+        form.addRow("Aylık Taksit Tutarı", self.ca_monthly_edit)
+        form.addRow("İlk Taksit Vadesi", self.ca_first_due_edit)
         form.addRow("Faiz Oranı", self.interest_edit)
         form.addRow("Başlangıç Tarihi", self.start_date_edit)
         form.addRow("Not", self.note_edit)
         if self._is_edit:
             form.addRow("Aktif", self.active_switch)
+        else:
+            # Ekle modunda aktiflik anahtarı anlamsız; layout'a eklenmediği için
+            # köşeye kaçmaması adına gizle.
+            self.active_switch.setVisible(False)
+        self._form = form
         layout.addLayout(form)
 
-        layout.addWidget(SubtitleLabel("Taksitler", self))
+        # Taksitli nakit avans için bilgilendirme (basit mod)
+        self.ca_info_label = BodyLabel(
+            "Taksitli nakit avansta taksitleri tek tek girmene gerek yok. "
+            "Ana para, taksit sayısı ve aylık taksit tutarını gir; "
+            "sistem anapara/faiz dağılımını ve tüm taksitleri otomatik üretir.",
+            self,
+        )
+        self.ca_info_label.setWordWrap(True)
+        layout.addWidget(self.ca_info_label)
+
+        self.manual_section = QWidget(self)
+        manual_layout = QVBoxLayout(self.manual_section)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+        manual_layout.addWidget(SubtitleLabel("Taksitler", self.manual_section))
         inst_buttons = QHBoxLayout()
-        self.add_inst_button = PrimaryPushButton("Taksit Ekle", self)
-        self.edit_inst_button = PushButton("Taksit Düzenle", self)
-        self.remove_inst_button = PushButton("Taksit Sil", self)
+        self.add_inst_button = PrimaryPushButton("Taksit Ekle", self.manual_section)
+        self.edit_inst_button = PushButton("Taksit Düzenle", self.manual_section)
+        self.remove_inst_button = PushButton("Taksit Sil", self.manual_section)
         inst_buttons.addWidget(self.add_inst_button)
         inst_buttons.addWidget(self.edit_inst_button)
         inst_buttons.addWidget(self.remove_inst_button)
         inst_buttons.addStretch()
-        layout.addLayout(inst_buttons)
+        manual_layout.addLayout(inst_buttons)
 
-        self.inst_table = QTableWidget(self)
+        self.inst_table = QTableWidget(self.manual_section)
         self.inst_table.setColumnCount(5)
         self.inst_table.setHorizontalHeaderLabels(
             ["Sıra", "Vade", "Toplam", "Kalan Anapara", "Not"]
@@ -139,7 +173,8 @@ class AddDebtPlanDialog(QDialog):
         self.inst_table.setSelectionMode(QTableWidget.SingleSelection)
         self.inst_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.inst_table.verticalHeader().setVisible(False)
-        layout.addWidget(self.inst_table)
+        manual_layout.addWidget(self.inst_table)
+        layout.addWidget(self.manual_section)
 
         button_row = QHBoxLayout()
         button_row.addStretch()
@@ -173,9 +208,16 @@ class AddDebtPlanDialog(QDialog):
         self._sync_source_visibility()
         self._refresh_source_options()
 
+    def _set_row_visible(self, field_widget: QWidget, visible: bool) -> None:
+        field_widget.setVisible(visible)
+        label = self._form.labelForField(field_widget)
+        if label is not None:
+            label.setVisible(visible)
+
     def _sync_source_visibility(self) -> None:
-        is_card = self.kind_combo.currentData() in CARD_SOURCE_PLAN_KINDS
-        is_kmh = self.kind_combo.currentData() == PlanKind.KMH_INSTALLMENT
+        plan_kind = self.kind_combo.currentData()
+        is_card = plan_kind in CARD_SOURCE_PLAN_KINDS
+        is_kmh = plan_kind == PlanKind.KMH_INSTALLMENT
         self.source_card_combo.setVisible(is_card)
         self.source_card_combo.setEnabled(is_card)
         self.source_kmh_combo.setVisible(is_kmh)
@@ -184,6 +226,18 @@ class AddDebtPlanDialog(QDialog):
             self.source_card_combo.setCurrentIndex(0)
         if not is_kmh:
             self.source_kmh_combo.setCurrentIndex(0)
+
+        # Taksitli nakit avans basit modu (yalnızca yeni plan eklerken):
+        # taksitleri elle girmek yerine sistem üretir.
+        simple_ca = (
+            plan_kind == PlanKind.CASH_ADVANCE_INSTALLMENT and not self._is_edit
+        )
+        self._set_row_visible(self.ca_count_spin, simple_ca)
+        self._set_row_visible(self.ca_monthly_edit, simple_ca)
+        self._set_row_visible(self.ca_first_due_edit, simple_ca)
+        self._set_row_visible(self.interest_edit, not simple_ca)
+        self.ca_info_label.setVisible(simple_ca)
+        self.manual_section.setVisible(not simple_ca)
 
     def _refresh_source_options(self) -> None:
         bank_id = self.bank_combo.currentData()
@@ -384,4 +438,8 @@ class AddDebtPlanDialog(QDialog):
             "installment_count": len(self._installments),
             "installments": self._installments,
             "is_active": self.active_switch.isChecked(),
+            # Taksitli nakit avans basit modu alanları (servis otomatik üretir)
+            "ca_installment_count": self.ca_count_spin.value(),
+            "ca_monthly_payment_text": self.ca_monthly_edit.text(),
+            "ca_first_due_date": self.ca_first_due_edit.date().toString("yyyy-MM-dd"),
         }
