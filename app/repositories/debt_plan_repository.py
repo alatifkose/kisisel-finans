@@ -541,6 +541,29 @@ class DebtPlanRepository:
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Yaklaşan taksitler okunamadı.")
 
+    def get_installments_by_source_card(self, credit_card_id: int) -> List[Dict[str, Any]]:
+        """Bir karta bağlı (source_card_id) tüm planların taksitleri.
+
+        Türetilen ekstre, bu taksitleri vade tarihine göre ilgili döneme yerleştirir.
+        """
+        sql = """
+            SELECT
+                i.id, i.debt_plan_id, i.seq, i.due_date, i.total_amount,
+                i.status, i.paid_date,
+                dp.name AS plan_name, dp.plan_kind, dp.installment_count
+            FROM installments i
+            INNER JOIN debt_plans dp ON dp.id = i.debt_plan_id AND dp.deleted_at IS NULL
+            WHERE i.deleted_at IS NULL
+              AND dp.source_card_id = ?
+            ORDER BY i.due_date, i.seq
+        """
+        try:
+            with get_connection() as conn:
+                rows = conn.execute(sql, (credit_card_id,)).fetchall()
+                return [_row_to_dict(row) for row in rows]
+        except sqlite3.Error as exc:
+            _handle_sqlite_error(exc, "Karta bağlı taksitler okunamadı.")
+
     def get_unpaid_totals_by_currency(self) -> List[Dict[str, Any]]:
         sql = """
             SELECT
