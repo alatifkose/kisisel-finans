@@ -17,6 +17,12 @@ from qfluentwidgets import (
     TextEdit,
 )
 
+from app.core.constants import (
+    CARD_ENTRY_TYPE_LABELS,
+    CARD_EXPENSE_ENTRY_TYPES,
+    CardEntryType,
+    VALID_CARD_ENTRY_TYPES,
+)
 from app.core.money import format_amount
 
 
@@ -219,5 +225,93 @@ class CardStatementDialog(_BaseFormDialog):
             "min_payment_text": self.min_payment_edit.text(),
             "due_date": self.due_date_edit.date().toString("yyyy-MM-dd"),
             "available_limit_text": self.available_limit_edit.text(),
+            "note": self.note_edit.toPlainText(),
+        }
+
+
+class CardEntryDialog(_BaseFormDialog):
+    """Kart tekil hareketi (alışveriş/nakit avans/ödeme/ücret/faiz)."""
+
+    def __init__(
+        self,
+        card: Dict[str, Any],
+        categories: List[Dict[str, Any]],
+        parent: Optional[QWidget] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        card_label = f"{card['bank_name']} - {card['name']} ({card['currency_code']})"
+        super().__init__(
+            "Kart Hareketi Ekle" if data is None else "Kart Hareketini Düzenle",
+            parent,
+        )
+        self._card = card
+
+        self._form.addRow("Kart", SubtitleLabel(card_label, self))
+
+        self.type_combo = ComboBox(self)
+        for entry_type in VALID_CARD_ENTRY_TYPES:
+            self.type_combo.addItem(CARD_ENTRY_TYPE_LABELS[entry_type], userData=entry_type)
+
+        self.date_edit = QDateEdit(self)
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.date_edit.setDate(QDate.currentDate())
+
+        self.amount_edit = LineEdit(self)
+
+        self.category_combo = ComboBox(self)
+        self.category_combo.addItem("— Yok —", userData=None)
+        for category in categories:
+            self.category_combo.addItem(category["name"], userData=category["id"])
+
+        self.description_edit = LineEdit(self)
+        self.description_edit.setPlaceholderText("Açıklama")
+        self.note_edit = TextEdit(self)
+        self.note_edit.setFixedHeight(60)
+
+        self._form.addRow("Tür", self.type_combo)
+        self._form.addRow("Tarih", self.date_edit)
+        self._form.addRow("Tutar", self.amount_edit)
+        self._form.addRow("Kategori (gider)", self.category_combo)
+        self._form.addRow("Açıklama", self.description_edit)
+        self._form.addRow("Not", self.note_edit)
+
+        self.type_combo.currentIndexChanged.connect(self._sync_category_enabled)
+        self._sync_category_enabled()
+
+        if data:
+            self._load_data(data)
+
+    def _sync_category_enabled(self) -> None:
+        is_expense = self.type_combo.currentData() in CARD_EXPENSE_ENTRY_TYPES
+        self.category_combo.setEnabled(is_expense)
+        if not is_expense:
+            self.category_combo.setCurrentIndex(0)
+
+    def _load_data(self, data: Dict[str, Any]) -> None:
+        index = self.type_combo.findData(data.get("entry_type"))
+        if index >= 0:
+            self.type_combo.setCurrentIndex(index)
+        parts = str(data.get("txn_date") or "").split("-")
+        if len(parts) == 3:
+            self.date_edit.setDate(QDate(int(parts[0]), int(parts[1]), int(parts[2])))
+        scale = int(data["scale"])
+        self.amount_edit.setText(format_amount(int(data["amount"]), scale))
+        self._sync_category_enabled()
+        if data.get("category_id") is not None:
+            cat_index = self.category_combo.findData(data["category_id"])
+            if cat_index >= 0:
+                self.category_combo.setCurrentIndex(cat_index)
+        self.description_edit.setText(str(data.get("description") or ""))
+        self.note_edit.setPlainText(str(data.get("note") or ""))
+
+    def get_values(self) -> Dict[str, Any]:
+        return {
+            "credit_card_id": self._card["id"],
+            "entry_type": self.type_combo.currentData(),
+            "txn_date": self.date_edit.date().toString("yyyy-MM-dd"),
+            "amount_text": self.amount_edit.text(),
+            "category_id": self.category_combo.currentData(),
+            "description": self.description_edit.text(),
             "note": self.note_edit.toPlainText(),
         }
