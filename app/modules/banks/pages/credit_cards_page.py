@@ -44,7 +44,8 @@ class CreditCardsPage(QWidget):
         layout.addWidget(TitleLabel("Kredi Kartları", self))
 
         splitter = QSplitter(self)
-        layout.addWidget(splitter)
+        # Dikey boşluğu başlık değil splitter (ve içindeki tablolar) doldursun.
+        layout.addWidget(splitter, 1)
 
         cards_widget = QWidget(self)
         cards_layout = QVBoxLayout(cards_widget)

@@ -15,6 +15,11 @@ class MainWindow(FluentWindow):
         super().__init__()
         self.setWindowTitle(APP_NAME)
 
+        # Sol üstteki hamburger (daralt/genişlet) butonu gereksiz; sidebar
+        # her zaman açık kalsın.
+        self.navigationInterface.setMenuButtonVisible(False)
+        self.navigationInterface.setCollapsible(False)
+
         self._home_page = HomePage(self)
         self.stackedWidget.addWidget(self._home_page)
 
