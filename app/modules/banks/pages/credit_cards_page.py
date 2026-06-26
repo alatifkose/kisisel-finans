@@ -68,7 +68,7 @@ class CreditCardsPage(QWidget):
         cards_layout.addLayout(card_buttons)
 
         self.cards_table = QTableWidget(self)
-        self.cards_table.setColumnCount(11)
+        self.cards_table.setColumnCount(12)
         self.cards_table.setHorizontalHeaderLabels(
             [
                 "#",
@@ -76,6 +76,7 @@ class CreditCardsPage(QWidget):
                 "Kart Adı",
                 "Para Birimi",
                 "Kart Limiti",
+                "Nakit Avans Limiti",
                 "Ekstre Günü",
                 "Son Ödeme Günü",
                 "Likidite Sayılır",
@@ -163,6 +164,7 @@ class CreditCardsPage(QWidget):
                 card["name"],
                 card["currency_code"],
                 card["card_limit_display"]["display"],
+                card["cash_advance_limit_display"]["display"],
                 card.get("statement_day") or "—",
                 card.get("due_day") or "—",
                 active_label(card["counts_as_liquidity"]),

@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS credit_cards (
     name                TEXT NOT NULL,
     currency_id         INTEGER NOT NULL REFERENCES currencies(id),
     card_limit          INTEGER NOT NULL DEFAULT 0,
+    cash_advance_limit  INTEGER NOT NULL DEFAULT 0,
     statement_day       INTEGER,
     due_day             INTEGER,
     counts_as_liquidity INTEGER NOT NULL DEFAULT 0,

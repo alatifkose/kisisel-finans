@@ -64,6 +64,7 @@ class CreditCardService:
                     parsed["name"],
                     parsed["currency_id"],
                     parsed["card_limit"],
+                    parsed["cash_advance_limit"],
                     parsed["statement_day"],
                     parsed["due_day"],
                     parsed["counts_as_liquidity"],
@@ -89,6 +90,7 @@ class CreditCardService:
                     parsed["name"],
                     parsed["currency_id"],
                     parsed["card_limit"],
+                    parsed["cash_advance_limit"],
                     parsed["statement_day"],
                     parsed["due_day"],
                     parsed["counts_as_liquidity"],
@@ -313,7 +315,28 @@ class CreditCardService:
             "card_limit_display": self._format_amount(
                 int(card["card_limit"]), scale, code, symbol
             ),
+            "cash_advance_limit_display": self._format_amount(
+                int(card.get("cash_advance_limit") or 0), scale, code, symbol
+            ),
         }
+
+    def get_cash_advance_available_by_currency(self) -> List[Dict[str, Any]]:
+        """Para birimi bazında kullanılabilir nakit avans (likidite için)."""
+        rows = self._credit_card_repo.get_cash_advance_available_by_currency()
+        formatted: List[Dict[str, Any]] = []
+        for row in rows:
+            formatted.append(
+                {
+                    **row,
+                    "available_total_display": self._format_amount(
+                        int(row["available_total"]),
+                        int(row["scale"]),
+                        row["currency_code"],
+                        row.get("currency_symbol") or "",
+                    ),
+                }
+            )
+        return formatted
 
     def _format_statement(self, row: Dict[str, Any]) -> Dict[str, Any]:
         scale = int(row["scale"])
@@ -364,6 +387,20 @@ class CreditCardService:
         if card_limit < 0:
             raise ValidationError("Kart limiti negatif olamaz.")
 
+        cash_advance_text = str(data.get("cash_advance_limit_text") or "").strip()
+        if cash_advance_text:
+            cash_advance_limit = self._parse_amount_required(
+                cash_advance_text, scale, "Nakit avans limiti"
+            )
+        else:
+            cash_advance_limit = 0
+        if cash_advance_limit < 0:
+            raise ValidationError("Nakit avans limiti negatif olamaz.")
+        if cash_advance_limit > card_limit:
+            raise ValidationError(
+                "Nakit avans limiti, toplam kart limitinden büyük olamaz."
+            )
+
         statement_day = self._parse_day(data.get("statement_day"), "Ekstre kesim günü")
         due_day = self._parse_day(data.get("due_day"), "Son ödeme günü")
         counts_as_liquidity = bool(data.get("counts_as_liquidity", False))
@@ -374,6 +411,7 @@ class CreditCardService:
             "name": name,
             "currency_id": int(currency_id),
             "card_limit": card_limit,
+            "cash_advance_limit": cash_advance_limit,
             "statement_day": statement_day,
             "due_day": due_day,
             "counts_as_liquidity": counts_as_liquidity,

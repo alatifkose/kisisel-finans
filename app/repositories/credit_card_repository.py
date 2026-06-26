@@ -24,6 +24,7 @@ _CARD_SELECT = """
         cc.name,
         cc.currency_id,
         cc.card_limit,
+        cc.cash_advance_limit,
         cc.statement_day,
         cc.due_day,
         cc.counts_as_liquidity,
@@ -92,6 +93,7 @@ class CreditCardRepository:
         name: str,
         currency_id: int,
         card_limit: int,
+        cash_advance_limit: int,
         statement_day: Optional[int],
         due_day: Optional[int],
         counts_as_liquidity: bool,
@@ -100,10 +102,10 @@ class CreditCardRepository:
     ) -> int:
         sql = """
             INSERT INTO credit_cards (
-                bank_id, name, currency_id, card_limit,
+                bank_id, name, currency_id, card_limit, cash_advance_limit,
                 statement_day, due_day, counts_as_liquidity, note
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         try:
             with connection_scope(conn) as c:
@@ -114,6 +116,7 @@ class CreditCardRepository:
                         name,
                         currency_id,
                         card_limit,
+                        cash_advance_limit,
                         statement_day,
                         due_day,
                         int(counts_as_liquidity),
@@ -135,6 +138,7 @@ class CreditCardRepository:
         name: str,
         currency_id: int,
         card_limit: int,
+        cash_advance_limit: int,
         statement_day: Optional[int],
         due_day: Optional[int],
         counts_as_liquidity: bool,
@@ -145,8 +149,9 @@ class CreditCardRepository:
         sql = """
             UPDATE credit_cards
             SET bank_id = ?, name = ?, currency_id = ?, card_limit = ?,
-                statement_day = ?, due_day = ?, counts_as_liquidity = ?,
-                is_active = ?, note = ?, updated_at = CURRENT_TIMESTAMP
+                cash_advance_limit = ?, statement_day = ?, due_day = ?,
+                counts_as_liquidity = ?, is_active = ?, note = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND deleted_at IS NULL
         """
         try:
@@ -158,6 +163,7 @@ class CreditCardRepository:
                         name,
                         currency_id,
                         card_limit,
+                        cash_advance_limit,
                         statement_day,
                         due_day,
                         int(counts_as_liquidity),
@@ -445,6 +451,60 @@ class CreditCardRepository:
                 return [_row_to_dict(row) for row in rows]
         except sqlite3.Error as exc:
             _handle_sqlite_error(exc, "Kredi kartı borç toplamları okunamadı.")
+
+    def get_cash_advance_available_by_currency(self) -> List[Dict[str, Any]]:
+        """Para birimi bazında kullanılabilir nakit avans toplamı.
+
+        Kart başına: cash_advance_limit - ödenmemiş nakit avans anaparası
+        (taksitli nakit avans planlarının ödenmemiş taksitlerindeki anapara
+        bileşenleri). Negatif olamaz. Yalnızca cash_advance_limit > 0 kartlar.
+        """
+        sql = """
+            SELECT
+                cur.id AS currency_id,
+                cur.code AS currency_code,
+                cur.symbol AS currency_symbol,
+                cur.scale AS scale,
+                COALESCE(SUM(
+                    CASE WHEN x.cash_advance_limit - x.outstanding > 0
+                         THEN x.cash_advance_limit - x.outstanding
+                         ELSE 0 END
+                ), 0) AS available_total
+            FROM (
+                SELECT
+                    cc.id,
+                    cc.currency_id,
+                    cc.cash_advance_limit,
+                    COALESCE((
+                        SELECT SUM(ic.amount)
+                        FROM debt_plans dp
+                        JOIN installments i
+                            ON i.debt_plan_id = dp.id
+                            AND i.deleted_at IS NULL
+                            AND i.status != 'paid'
+                        JOIN installment_components ic
+                            ON ic.installment_id = i.id AND ic.deleted_at IS NULL
+                        JOIN component_types ct
+                            ON ct.id = ic.component_type_id AND ct.nature = 'principal'
+                        WHERE dp.source_card_id = cc.id
+                          AND dp.plan_kind = 'ca_installment'
+                          AND dp.deleted_at IS NULL
+                    ), 0) AS outstanding
+                FROM credit_cards cc
+                WHERE cc.deleted_at IS NULL
+                  AND cc.is_active = 1
+                  AND cc.cash_advance_limit > 0
+            ) x
+            JOIN currencies cur ON cur.id = x.currency_id AND cur.deleted_at IS NULL
+            GROUP BY cur.id, cur.code, cur.symbol, cur.scale
+            ORDER BY cur.code
+        """
+        try:
+            with get_connection() as conn:
+                rows = conn.execute(sql).fetchall()
+                return [_row_to_dict(row) for row in rows]
+        except sqlite3.Error as exc:
+            _handle_sqlite_error(exc, "Kart nakit avans likiditesi okunamadı.")
 
     def get_total_card_limits_by_currency(self) -> List[Dict[str, Any]]:
         sql = """

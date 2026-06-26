@@ -71,6 +71,8 @@ class CreditCardDialog(_BaseFormDialog):
             self.currency_combo.addItem(label, userData=currency)
 
         self.limit_edit = LineEdit(self)
+        self.cash_advance_edit = LineEdit(self)
+        self.cash_advance_edit.setPlaceholderText("0")
         self.statement_day_spin = SpinBox(self)
         self.statement_day_spin.setRange(0, 31)
         self.statement_day_spin.setSpecialValueText("—")
@@ -88,6 +90,7 @@ class CreditCardDialog(_BaseFormDialog):
         self._form.addRow("Kart Adı", self.name_edit)
         self._form.addRow("Para Birimi", self.currency_combo)
         self._form.addRow("Kart Limiti", self.limit_edit)
+        self._form.addRow("Nakit Avans Limiti", self.cash_advance_edit)
         self._form.addRow("Ekstre Kesim Günü", self.statement_day_spin)
         self._form.addRow("Son Ödeme Günü", self.due_day_spin)
         self._form.addRow("Likidite Sayılır", self.liquidity_switch)
@@ -117,6 +120,9 @@ class CreditCardDialog(_BaseFormDialog):
                 break
         scale = int(data["scale"])
         self.limit_edit.setText(format_amount(int(data["card_limit"]), scale))
+        self.cash_advance_edit.setText(
+            format_amount(int(data.get("cash_advance_limit") or 0), scale)
+        )
         if data.get("statement_day"):
             self.statement_day_spin.setValue(int(data["statement_day"]))
         if data.get("due_day"):
@@ -133,6 +139,7 @@ class CreditCardDialog(_BaseFormDialog):
             "name": self.name_edit.text(),
             "currency_id": self.currency_combo.currentData()["id"],
             "card_limit_text": self.limit_edit.text(),
+            "cash_advance_limit_text": self.cash_advance_edit.text(),
             "statement_day": statement_day if statement_day > 0 else None,
             "due_day": due_day if due_day > 0 else None,
             "counts_as_liquidity": self.liquidity_switch.isChecked(),

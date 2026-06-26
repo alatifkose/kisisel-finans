@@ -62,8 +62,28 @@ class SummaryService:
         rows = self._summary_repo.get_cash_balances_by_currency()
         return [self._format_currency_amount_row(row, "total_balance") for row in rows]
 
+    def get_credit_card_cash_advance_available_by_currency(self) -> List[Dict[str, Any]]:
+        """Para birimi bazında kullanılabilir nakit avans (kart alt-limiti)."""
+        rows = self._credit_card_repo.get_cash_advance_available_by_currency()
+        formatted: List[Dict[str, Any]] = []
+        for row in rows:
+            if int(row.get("available_total") or 0) == 0:
+                continue
+            formatted.append(
+                {
+                    **row,
+                    "available_total_display": self.format_summary_amounts(
+                        int(row["available_total"]),
+                        int(row["scale"]),
+                        row["currency_code"],
+                        row.get("currency_symbol") or "",
+                    ),
+                }
+            )
+        return formatted
+
     def get_available_liquidity(self) -> List[Dict[str, Any]]:
-        """Nakit bakiye + KMH kullanılabilir limit (para birimi bazında)."""
+        """Nakit bakiye + KMH kullanılabilir + kart nakit avansı (para birimi bazında)."""
         cash_by_currency: Dict[int, Dict[str, Any]] = {}
         for row in self.get_cash_balances():
             cash_by_currency[int(row["currency_id"])] = row
@@ -72,27 +92,30 @@ class SummaryService:
         for row in self.get_kmh_available_liquidity_by_currency():
             kmh_by_currency[int(row["currency_id"])] = row
 
-        currency_ids = sorted(set(cash_by_currency) | set(kmh_by_currency))
+        card_by_currency: Dict[int, Dict[str, Any]] = {}
+        for row in self.get_credit_card_cash_advance_available_by_currency():
+            card_by_currency[int(row["currency_id"])] = row
+
+        currency_ids = sorted(
+            set(cash_by_currency) | set(kmh_by_currency) | set(card_by_currency)
+        )
         breakdown: List[Dict[str, Any]] = []
         for currency_id in currency_ids:
             cash_row = cash_by_currency.get(currency_id)
             kmh_row = kmh_by_currency.get(currency_id)
+            card_row = card_by_currency.get(currency_id)
 
-            if cash_row:
-                currency_code = cash_row["currency_code"]
-                currency_symbol = cash_row.get("currency_symbol") or ""
-                scale = int(cash_row["scale"])
-                cash_raw = int(cash_row["total_balance"]["raw"])
-            elif kmh_row:
-                currency_code = kmh_row["currency_code"]
-                currency_symbol = kmh_row.get("currency_symbol") or ""
-                scale = int(kmh_row["scale"])
-                cash_raw = 0
-            else:
+            meta = cash_row or kmh_row or card_row
+            if meta is None:
                 continue
+            currency_code = meta["currency_code"]
+            currency_symbol = meta.get("currency_symbol") or ""
+            scale = int(meta["scale"])
 
+            cash_raw = int(cash_row["total_balance"]["raw"]) if cash_row else 0
             kmh_raw = int(kmh_row["available_total"]) if kmh_row else 0
-            total_raw = cash_raw + kmh_raw
+            card_raw = int(card_row["available_total"]) if card_row else 0
+            total_raw = cash_raw + kmh_raw + card_raw
 
             breakdown.append(
                 {
@@ -105,6 +128,9 @@ class SummaryService:
                     ),
                     "kmh_available_total": self.format_summary_amounts(
                         kmh_raw, scale, currency_code, currency_symbol
+                    ),
+                    "card_cash_advance_available": self.format_summary_amounts(
+                        card_raw, scale, currency_code, currency_symbol
                     ),
                     "total_liquidity": self.format_summary_amounts(
                         total_raw, scale, currency_code, currency_symbol
